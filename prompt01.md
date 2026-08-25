@@ -10,7 +10,7 @@
 
 6. Un libro puede pertenecer a varios géneros.
 
-7. UN libro opuede definir muchos conceptos y un mismo concepto puede aparecer en distintos libros con definiciones diferentes.
+7. Un libro opuede definir muchos conceptos y un mismo concepto puede aparecer en distintos libros con definiciones diferentes.
 
 8. Un libro puede tener varias imágenes.
 
