@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library>
+    <book isbn="978-0-06-112008-4">
+        <title>To Kill a Mockingbird</title>
+        <authors>
+            <author>Harper Lee</author>
+        </authors>
+        <publicationYear>1960</publicationYear>
+        <genres>
+            <genre>Fiction</genre>
+            <genre>Classic</genre>
+        </genres>
+        <price currency="USD">15.99</price>
+        <stock>45</stock>
+        <format>Hardcover</format>
+        <images>
+            <image url="https://example.com/images/mockingbird-cover.jpg" altText="To Kill a Mockingbird Cover" isCover="true" order="1"/>
+            <image url="https://example.com/images/mockingbird-back.jpg" altText="To Kill a Mockingbird Back" isCover="false" order="2"/>
+        </images>
+        <concepts>
+            <concept name="Moral Growth" definition="The process of developing an understanding of right and wrong through experience and reflection"/>
+            <concept name="Social Justice" definition="The concept of creating fair and just societies with equal rights and opportunities for all"/>
+            <concept name="Prejudice" definition="The preconceived opinion or feeling formed without knowledge or thought about a subject"/>
+        </concepts>
+        <category>Fiction</category>
+        <description>A gripping tale of racial injustice and childhood innocence in the American South</description>
+    </book>
+    <book isbn="978-0-451-52494-2">
+        <title>1984</title>
+        <authors>
+            <author>George Orwell</author>
+        </authors>
+        <publicationYear>1949</publicationYear>
+        <genres>
+            <genre>Science Fiction</genre>
+            <genre>Dystopian</genre>
+        </genres>
+        <price currency="USD">13.99</price>
+        <stock>62</stock>
+        <format>Paperback</format>
+        <images>
+            <image url="https://example.com/images/1984-cover.jpg" altText="1984 Cover" isCover="true" order="1"/>
+            <image url="https://example.com/images/1984-page.jpg" altText="1984 Interior" isCover="false" order="2"/>
+        </images>
+        <concepts>
+            <concept name="Totalitarianism" definition="A system of government where the state holds total authority and control over all aspects of society"/>
+            <concept name="Surveillance" definition="The monitoring of activities, communications, or information to maintain control and suppress dissent"/>
+            <concept name="Propaganda" definition="The systematic dissemination of ideas intended to manipulate public opinion and control thought"/>
+        </concepts>
+        <category>Science Fiction</category>
+        <description>A dystopian novel depicting a totalitarian society where Big Brother watches everyone constantly</description>
+    </book>
+    <book isbn="978-0-7475-3269-9">
+        <title>Harry Potter and the Philosopher's Stone</title>
+        <authors>
+            <author>Joanne Rowling</author>
+        </authors>
+        <publicationYear>1997</publicationYear>
+        <genres>
+            <genre>Fantasy</genre>
+            <genre>Young Adult</genre>
+        </genres>
+        <price currency="USD">12.99</price>
+        <stock>128</stock>
+        <format>Hardcover</format>
+        <images>
+            <image url="https://example.com/images/hp-cover.jpg" altText="Harry Potter Cover" isCover="true" order="1"/>
+            <image url="https://example.com/images/hp-illustration.jpg" altText="Harry Potter Illustration" isCover="false" order="2"/>
+            <image url="https://example.com/images/hp-wand.jpg" altText="Magical Wand" isCover="false" order="3"/>
+        </images>
+        <concepts>
+            <concept name="Magic" definition="The art of performing supernatural feats through the use of spells, potions, and magical artifacts"/>
+            <concept name="Friendship" definition="A deep bond between individuals based on loyalty, trust, and mutual support"/>
+            <concept name="Chosen One" definition="The concept of a person destined to fulfill a special role or prophecy in overcoming evil"/>
+        </concepts>
+        <category>Fantasy</category>
+        <description>The beginning of Harry Potter's journey into the magical world and his battle against dark forces</description>
+    </book>
+    <book isbn="978-0-316-76948-0">
+        <title>The Catcher in the Rye</title>
+        <authors>
+            <author>J. D. Salinger</author>
+        </authors>
+        <publicationYear>1951</publicationYear>
+        <genres>
+            <genre>Fiction</genre>
+            <genre>Coming of Age</genre>
+        </genres>
+        <price currency="USD">14.99</price>
+        <stock>38</stock>
+        <format>Paperback</format>
+        <images>
+            <image url="https://example.com/images/catcher-cover.jpg" altText="The Catcher in the Rye Cover" isCover="true" order="1"/>
+        </images>
+        <concepts>
+            <concept name="Alienation" definition="The feeling of being separated from society or disconnected from one's environment"/>
+            <concept name="Innocence" definition="The state of being free from guilt, corruption, or wrongdoing, especially in youth"/>
+            <concept name="Hypocrisy" definition="The practice of claiming beliefs or virtues one does not truly possess"/>
+        </concepts>
+        <category>Fiction</category>
+        <description>The story of Holden Caulfield navigating adolescence and societal expectations in post-war America</description>
+    </book>
+    <book isbn="978-0-743-27666-5">
+        <title>The Great Gatsby</title>
+        <authors>
+            <author>F. Scott Fitzgerald</author>
+        </authors>
+        <publicationYear>1925</publicationYear>
+        <genres>
+            <genre>Fiction</genre>
+            <genre>Classic</genre>
+        </genres>
+        <price currency="USD">11.99</price>
+        <stock>75</stock>
+        <format>Hardcover</format>
+        <images>
+            <image url="https://example.com/images/gatsby-cover.jpg" altText="The Great Gatsby Cover" isCover="true" order="1"/>
+            <image url="https://example.com/images/gatsby-art.jpg" altText="1920s Artwork" isCover="false" order="2"/>
+        </images>
+        <concepts>
+            <concept name="American Dream" definition="The belief that anyone through hard work and determination can achieve prosperity and happiness"/>
+            <concept name="Wealth and Class" definition="Social hierarchies based on economic status and the pursuit of material success"/>
+            <concept name="Love and Obsession" definition="The passionate attachment to another person that can become destructive and consuming"/>
+        </concepts>
+        <category>Fiction</category>
+        <description>A tale of wealth, love, and the pursuit of the American Dream during the Jazz Age</description>
+    </book>
+</library>
