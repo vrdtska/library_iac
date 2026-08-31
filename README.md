@@ -6,7 +6,7 @@ La aplicación web monolítica gestiona una librería en línea con acceso direc
 
 La base del sistema parte de la entidad principal `libros`, y la estructura de datos permite soportar relaciones complejas sin perder integridad ni escalabilidad dentro de una aplicación monolítica.
 
-## 2. Patrones de diseño aplicados
+## 2. Patrones de diseño  aplicados
 
 ### 2.1 Arquitectura macro-arquitectura monolítica
 

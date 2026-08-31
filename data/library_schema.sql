@@ -131,7 +131,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
+ 
 CREATE TRIGGER trg_libros_updated_at
 BEFORE UPDATE ON libros
 FOR EACH ROW

@@ -6,4 +6,4 @@
 * **RF4 - Manejo de Cardinalidad M:N Compleja**: Asociación atómica y transaccional entre un libro y múltiples autores, múltiples géneros y múltiples etiquetas conceptuales sin redundancia multivaluada.
 * **RF5 - Gestión Segura de Archivos (Uploads)**: Carga de portadas con verificación de *magic numbers* (firmas binarias), limitación de tamaño máximo a 2 MB por archivo, almacenamiento en disco bajo nombres UUIDv4 y registro relacional de metadatos.
 * **RF6 - Control de Inventario y Precios**: Restricciones de integridad de dominio (`CHECK (stock >= 0)`, `CHECK (price > 0.00)`) con actualización atómica de existencias.
-* **RF7 - Control de Acceso y Gestión Administrativa**: Rutas protegidas exclusivas para el usuario Administrador con guardas a nivel de middleware.
+* **RF7 - Control de Acceso y Gestión Administrativa**: Rutas protegidas exclusivas para el usuario Administrador con guardas a nivel de middleware. 

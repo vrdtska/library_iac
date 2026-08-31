@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS formatos (
     nombre VARCHAR(100) NOT NULL UNIQUE,
     descripcion TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+); 
 
 CREATE TABLE IF NOT EXISTS autores (
     id BIGSERIAL PRIMARY KEY,

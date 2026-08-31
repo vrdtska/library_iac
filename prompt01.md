@@ -21,7 +21,7 @@
 11. Utiliza el patrón arquitectónico macro-arquitectura monolítica.
 
 12. Utiliza el patrón de diseño MVC (Modelo Vista Controlador) para la GUI.
-
+ 
 13. Aplica el enfoque de organización de código modular (por módulos).
 
 14. Utiliza el esquema de base de datos de Postgres del archivo /data/db_schema.sql
