@@ -1,0 +1,397 @@
+/* Library XML Stylesheet */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+    min-height: 100vh;
+}
+
+library {
+    display: block;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Book Container */
+book {
+    display: block;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+book:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Book Header with ISBN */
+book::before {
+    content: attr(isbn);
+    display: block;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 10px 20px;
+    font-weight: bold;
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+/* Main Content */
+book > * {
+    display: block;
+    padding: 15px 20px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+/* Title Styling */
+title {
+    display: block;
+    font-size: 28px;
+    font-weight: bold;
+    color: #333;
+    padding: 25px 20px 15px 20px;
+    background: #f9f9f9;
+}
+
+/* Authors Section */
+authors {
+    display: block;
+    padding: 15px 20px;
+    background: #f5f5f5;
+}
+
+authors::before {
+    content: "Authors: ";
+    font-weight: bold;
+    color: #667eea;
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+author {
+    display: inline-block;
+    background: #667eea;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    margin-right: 8px;
+    font-size: 14px;
+    margin-top: 8px;
+}
+
+/* Publication Year */
+publicationYear {
+    display: inline-block;
+    background: #e8f0ff;
+    color: #667eea;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+    margin-top: 8px;
+}
+
+/* Genres */
+genres {
+    display: block;
+    padding: 15px 20px;
+}
+
+genres::before {
+    content: "Genres: ";
+    font-weight: bold;
+    color: #764ba2;
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+genre {
+    display: inline-block;
+    background: #764ba2;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-right: 8px;
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+/* Category */
+category {
+    display: inline-block;
+    background: #fff3cd;
+    color: #856404;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    margin-left: 10px;
+    margin-top: 8px;
+}
+
+/* Price Section */
+price {
+    display: block;
+    font-size: 24px;
+    color: #27ae60;
+    font-weight: bold;
+    padding: 15px 20px;
+    background: #f0fdf4;
+}
+
+price::before {
+    content: "Price: ";
+    color: #666;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 5px;
+    font-weight: normal;
+}
+
+/* Stock Information */
+stock {
+    display: inline-block;
+    background: #d4edff;
+    color: #0066cc;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+    margin-left: 10px;
+}
+
+stock::before {
+    content: "Stock: ";
+    font-weight: normal;
+}
+
+/* Format */
+format {
+    display: inline-block;
+    background: #ffe8d4;
+    color: #cc6600;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+    margin-left: 10px;
+}
+
+format::before {
+    content: "Format: ";
+    font-weight: normal;
+}
+
+/* Description */
+description {
+    display: block;
+    padding: 15px 20px;
+    color: #555;
+    font-size: 14px;
+    line-height: 1.6;
+    font-style: italic;
+    background: #fafafa;
+}
+
+/* Images Section */
+images {
+    display: block;
+    padding: 15px 20px;
+    background: #f5f5f5;
+}
+
+images::before {
+    content: "Images:";
+    display: block;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+image {
+    display: inline-block;
+    width: 22%;
+    margin-right: 2%;
+    margin-bottom: 10px;
+    text-align: center;
+    vertical-align: top;
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+}
+
+image:last-child {
+    margin-right: 0;
+}
+
+image::before {
+    content: attr(altText);
+    display: block;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+image::after {
+    content: "[Image: " attr(url) "]";
+    display: block;
+    font-size: 10px;
+    color: #999;
+    word-break: break-all;
+    font-family: monospace;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e0e0e0;
+}
+
+/* Concepts Section */
+concepts {
+    display: block;
+    padding: 15px 20px;
+}
+
+concepts::before {
+    content: "Key Concepts:";
+    display: block;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+concept {
+    display: block;
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border-left: 4px solid #667eea;
+    padding: 12px 15px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+}
+
+concept::before {
+    content: attr(name);
+    display: block;
+    font-weight: bold;
+    color: #667eea;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+concept::after {
+    content: attr(definition);
+    display: block;
+    color: #555;
+    font-size: 13px;
+    line-height: 1.5;
+    font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    book {
+        margin-bottom: 20px;
+    }
+
+    title {
+        font-size: 22px;
+    }
+
+    price {
+        font-size: 20px;
+    }
+
+    image {
+        width: 48%;
+        margin-right: 2%;
+    }
+
+    image:nth-child(odd) {
+        margin-right: 2%;
+    }
+
+    image:nth-child(even) {
+        margin-right: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+
+    book {
+        border-radius: 8px;
+    }
+
+    title {
+        font-size: 18px;
+        padding: 15px 15px 10px 15px;
+    }
+
+    book > * {
+        padding: 12px 15px;
+    }
+
+    author, genre {
+        display: block;
+        margin-right: 0;
+        margin-bottom: 6px;
+    }
+
+    image {
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 8px;
+    }
+
+    price {
+        font-size: 18px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    body {
+        background: white;
+        padding: 0;
+    }
+
+    book {
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ccc;
+        margin-bottom: 20px;
+    }
+
+    book:hover {
+        transform: none;
+        box-shadow: none;
+    }
+}

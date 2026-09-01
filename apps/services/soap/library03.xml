@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<?xml-stylesheet type="text/css" href="styles.css"?>
+<?xml-stylesheet type="text/xsl" href="library03.xsl"?>
 <library>
     <book isbn="978-0-06-112008-4">
         <title>To Kill a Mockingbird</title>
