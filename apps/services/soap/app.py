@@ -80,60 +80,24 @@ def serialize_rows(rows):
 
 @app.route('/api/libros', methods=['GET'])
 def get_all_books():
-    """
-    Obtiene todos los libros de la biblioteca
-    ---
-    tags:
-      - Books
-    responses:
-      200:
-        description: Lista de todos los libros
-        schema:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: integer
-              titulo:
-                type: string
-              isbn:
-                type: string
-              anio_publicacion:
-                type: integer
-              precio:
-                type: number
-              stock:
-                type: integer
-              formato_id:
-                type: integer
-              categoria_id:
-                type: integer
-              created_at:
-                type: string
-      500:
-        description: Error en el servidor
-    """
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+    fmt = request.args.get('format', 'json').strip().lower()
     
-    try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            SELECT id, titulo, subtitulo, isbn, anio_publicacion, 
-                   descripcion, precio, stock, formato_id, categoria_id, 
-                   created_at, updated_at
-            FROM libros
-            ORDER BY id
-        """)
-        books = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
-        return jsonify(serialize_rows(books)), 200
-    except psycopg2.Error as e:
-        return jsonify({"error": f"Error en la consulta: {str(e)}"}), 500
+    libros = [
+        {"id": 1, "isbn": "11111111", "titulo": "Libro 1"},
+        {"id": 2, "isbn": "22222222", "titulo": "Libro 2"}
+    ]
+
+    if fmt == 'xml':
+        root = ET.Element('libros')
+        for item in libros:
+            book_el = ET.SubElement(root, 'libro')
+            for k, v in item.items():
+                child = ET.SubElement(book_el, str(k))
+                child.text = str(v) if v is not None else ""
+        xml_data = ET.tostring(root, encoding='utf-8', method='xml')
+        return Response(xml_data, status=200, mimetype='application/xml')
+
+    return jsonify(libros), 200
 
 @app.route('/api/libros/<int:libro_id>', methods=['GET'])
 def get_book_by_id(libro_id):
@@ -182,48 +146,31 @@ def get_book_by_id(libro_id):
 
 @app.route('/api/libros/isbn/<isbn>', methods=['GET'])
 def get_book_by_isbn(isbn):
-    """
-    Busca un libro por ISBN
-    ---
-    tags:
-      - Books
-    parameters:
-      - name: isbn
-        in: path
-        type: string
-        required: true
-        description: ISBN del libro
-    responses:
-      200:
-        description: Libro encontrado
-      404:
-        description: Libro no encontrado
-      500:
-        description: Error en el servidor
-    """
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-    
-    try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            SELECT id, titulo, subtitulo, isbn, anio_publicacion, 
-                   descripcion, precio, stock, formato_id, categoria_id, 
-                   created_at, updated_at
-            FROM libros
-            WHERE isbn = %s
-        """, (isbn,))
-        book = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if book is None:
-            return jsonify({"error": "Libro con ISBN no encontrado"}), 404
-        
-        return jsonify(serialize_row(book)), 200
-    except psycopg2.Error as e:
-        return jsonify({"error": f"Error en la consulta: {str(e)}"}), 500
+    # 1. Obtener el formato solicitado (por defecto 'json')
+    fmt = request.args.get('format', 'json').strip().lower()
+
+    # 2. Consultar la base de datos (ejemplo conceptual)
+    # libro = db_find_book_by_isbn(isbn)
+    libro = {
+        "id": 1,
+        "isbn": isbn,
+        "titulo": "Clean Code",
+        "precio": 450.00,
+        "stock": 10
+    }
+
+    if not libro:
+        if fmt == 'xml':
+            error_xml = "<error><mensaje>Libro no encontrado</mensaje></error>"
+            return Response(error_xml, status=404, mimetype='application/xml')
+        return jsonify({"error": "Libro no encontrado"}), 404
+
+    # 3. Retornar según el parámetro format
+    if fmt == 'xml':
+        xml_data = dict_to_xml('libro', libro)
+        return Response(xml_data, status=200, mimetype='application/xml')
+    else:
+        return jsonify(libro), 200
 
 @app.route('/api/libros/buscar', methods=['GET'])
 def search_books():
