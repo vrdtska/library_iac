@@ -172,6 +172,104 @@ def get_book_by_isbn(isbn):
     else:
         return jsonify(libro), 200
 
+@app.route('/api/libros/<identifier>/temas', methods=['GET'])
+def get_book_themes(identifier):
+    """
+    Obtener nombre del libro, ISBN y sus temas con descripción.
+    Permite buscar por ID numérico o por ISBN.
+    Soporta ?format=json (default) y ?format=xml.
+    ---
+    tags:
+      - Libros
+    parameters:
+      - name: identifier
+        in: path
+        type: string
+        required: true
+        description: ID del libro o código ISBN
+      - name: format
+        in: query
+        type: string
+        required: false
+        description: Formato de respuesta (json o xml)
+    responses:
+      200:
+        description: Datos del libro y sus temas asociados
+      404:
+        description: Libro no encontrado
+    """
+    fmt = request.args.get('format', 'json').strip().lower()
+
+    # 1. Obtener conexión a PostgreSQL
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # 2. Consultar el libro y sus conceptos mediante JOIN
+        query = """
+            SELECT 
+                l.id AS libro_id,
+                l.titulo,
+                l.isbn,
+                c.id AS concepto_id,
+                c.nombre AS tema_nombre,
+                c.descripcion AS tema_descripcion,
+                lc.definicion_contextual
+            FROM libros l
+            LEFT JOIN libro_conceptos lc ON l.id = lc.libro_id
+            LEFT JOIN conceptos c ON lc.concepto_id = c.id
+            WHERE l.isbn = %s OR CAST(l.id AS TEXT) = %s
+            ORDER BY c.nombre ASC;
+        """
+        cur.execute(query, (identifier, identifier))
+        rows = cur.fetchall()
+
+        if not rows:
+            if fmt == 'xml':
+                return Response(
+                    "<error><mensaje>Libro no encontrado</mensaje></error>",
+                    status=404,
+                    mimetype='application/xml'
+                )
+            return jsonify({"error": "Libro no encontrado"}), 404
+
+        # 3. Estructurar la información
+        first_row = rows[0]
+        resultado = {
+            "id": first_row["libro_id"],
+            "titulo": first_row["titulo"],
+            "isbn": first_row["isbn"],
+            "temas": []
+        }
+
+        for row in rows:
+            if row["concepto_id"] is not None:
+                resultado["temas"].append({
+                    "id": row["concepto_id"],
+                    "nombre": row["tema_nombre"],
+                    "descripcion": row["tema_descripcion"] or "",
+                    "definicion_contextual": row["definicion_contextual"] or ""
+                })
+
+        # 4. Respuesta en XML o JSON
+        if fmt == 'xml':
+            xml_output = book_themes_to_xml(resultado)
+            return Response(xml_output, status=200, mimetype='application/xml')
+
+        return jsonify(resultado), 200
+
+    except Exception as e:
+        if fmt == 'xml':
+            return Response(
+                f"<error><mensaje>{str(e)}</mensaje></error>",
+                status=500,
+                mimetype='application/xml'
+            )
+        return jsonify({"error": "Error interno del servidor", "detalle": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route('/api/libros/buscar', methods=['GET'])
 def search_books():
     """
