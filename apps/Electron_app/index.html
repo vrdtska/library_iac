@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Librería Digital - Catálogo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>📚 Librería Digital</h1>
+            <div class="header-actions">
+                <button id="configBtn" class="btn-secondary">⚙️ Configuración</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Configuration Section (Hidden by default) -->
+        <section id="configSection" class="card config-card hidden">
+            <h3>Configuración del Microservicio</h3>
+            <div class="form-group">
+                <label for="apiUrl">URL Base:</label>
+                <input type="text" id="apiUrl" placeholder="http://10.224.0.2:5001">
+            </div>
+            <div class="form-group">
+                <label for="apiEndpoint">Endpoint:</label>
+                <input type="text" id="apiEndpoint" placeholder="/books">
+            </div>
+            <div class="form-actions">
+                <button id="saveConfig" class="btn-primary">Guardar</button>
+                <button id="closeConfig" class="btn-secondary">Cerrar</button>
+            </div>
+        </section>
+
+        <!-- Catalog Section -->
+        <section id="catalogSection">
+            <div id="loading" class="loading hidden">Cargando catálogo...</div>
+            <div id="error" class="error-message hidden"></div>
+            
+            <div id="bookGrid" class="book-grid">
+                <!-- Cards will be injected here -->
+            </div>
+
+            <div class="pagination">
+                <button id="prevPage" class="btn-page" disabled>Anterior</button>
+                <span id="pageInfo">Página 1</span>
+                <button id="nextPage" class="btn-page">Siguiente</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
