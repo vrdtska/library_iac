@@ -1,0 +1,3 @@
+Santiago Lopez Cervantes
+
+Poder hacer esto cambia todo de ingeniería de software. Ahora seré capaz de consolidar proyectos con todas las tecnologías que he aprendido hasta ahora para crear aplicaciones que corran nativamente en distintas tecnologías, de manera que pueda unificar y utilizar mi trabajo en una mayor variedad de tecnologías. Además de la aplicación de conocimientos de aplicaciones web, ahora también he podido aplicar mi conocimiento de redes para consolidar la extracción de datos mediante XML y microservicios con mi maquina local. Ahora se me ha abierto un nuevo mundo de desarrollo, que conjunto con la IA, me habilita una gran manera de desarrollar aplicaciones inteligentes.

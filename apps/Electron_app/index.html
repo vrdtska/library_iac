@@ -3,54 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Librería Digital - Catálogo</title>
+    <title>Catálogo de Biblioteca</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>📚 Librería Digital</h1>
-            <div class="header-actions">
-                <button id="configBtn" class="btn-secondary">⚙️ Configuración</button>
-            </div>
-        </div>
+    <header class="topbar">
+        <h1>Catálogo de Libros</h1>
+        <button id="configBtn" class="btn">⚙️ Configurar Endpoint</button>
     </header>
 
+    <div id="configModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Configuración del Servicio XML</h2>
+            <p>Define la URL del microservicio (Ej: http://10.224.0.2:5001/books)</p>
+            <input type="text" id="endpointUrl" class="input-text">
+            <div class="modal-actions">
+                <button id="saveBtn" class="btn btn-primary">Guardar</button>
+                <button id="cancelBtn" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <main class="container">
-        <!-- Configuration Section (Hidden by default) -->
-        <section id="configSection" class="card config-card hidden">
-            <h3>Configuración del Microservicio</h3>
-            <div class="form-group">
-                <label for="apiUrl">URL Base:</label>
-                <input type="text" id="apiUrl" placeholder="http://10.224.0.2:5001">
-            </div>
-            <div class="form-group">
-                <label for="apiEndpoint">Endpoint:</label>
-                <input type="text" id="apiEndpoint" placeholder="/books">
-            </div>
-            <div class="form-actions">
-                <button id="saveConfig" class="btn-primary">Guardar</button>
-                <button id="closeConfig" class="btn-secondary">Cerrar</button>
-            </div>
-        </section>
+        <div id="loader" class="loader hidden">Cargando catálogo...</div>
+        <div id="errorBox" class="error-box hidden"></div>
+        
+        <div id="catalogGrid" class="grid"></div>
 
-        <!-- Catalog Section -->
-        <section id="catalogSection">
-            <div id="loading" class="loading hidden">Cargando catálogo...</div>
-            <div id="error" class="error-message hidden"></div>
-            
-            <div id="bookGrid" class="book-grid">
-                <!-- Cards will be injected here -->
-            </div>
-
-            <div class="pagination">
-                <button id="prevPage" class="btn-page" disabled>Anterior</button>
-                <span id="pageInfo">Página 1</span>
-                <button id="nextPage" class="btn-page">Siguiente</button>
-            </div>
-        </section>
+        <div class="pagination">
+            <button id="prevBtn" class="btn" disabled>Anterior</button>
+            <span id="pageIndicator">Página 1</span>
+            <button id="nextBtn" class="btn" disabled>Siguiente</button>
+        </div>
     </main>
 
-    <script src="renderer.js"></script>
+    <script>
+        const DEFAULT_URL = 'http://10.224.0.2:5001/books';
+        const ITEMS_PER_PAGE = 8;
+        let currentPage = 1;
+        let globalBooks = [];
+
+        // Configuración mediante LocalStorage
+        const getEndpoint = () => localStorage.getItem('xmlEndpoint') || DEFAULT_URL;
+        document.getElementById('endpointUrl').value = getEndpoint();
+
+        // Control del Modal
+        const modal = document.getElementById('configModal');
+        document.getElementById('configBtn').onclick = () => modal.classList.remove('hidden');
+        document.getElementById('cancelBtn').onclick = () => modal.classList.add('hidden');
+        document.getElementById('saveBtn').onclick = () => {
+            const newUrl = document.getElementById('endpointUrl').value.trim();
+            if(newUrl) {
+                localStorage.setItem('xmlEndpoint', newUrl);
+                modal.classList.add('hidden');
+                currentPage = 1;
+                loadBooks();
+            }
+        };
+
+        // Consumo Exclusivo de XML y Petición
+        async function loadBooks() {
+            const grid = document.getElementById('catalogGrid');
+            const loader = document.getElementById('loader');
+            const errorBox = document.getElementById('errorBox');
+            
+            grid.innerHTML = '';
+            errorBox.classList.add('hidden');
+            loader.classList.remove('hidden');
+
+            try {
+                const response = await fetch(getEndpoint());
+                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+                
+                const xmlText = await response.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+                
+                if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+                    throw new Error('El microservicio no devolvió un XML válido.');
+                }
+
+                const bookNodes = xmlDoc.getElementsByTagName('book');
+                globalBooks = Array.from(bookNodes).map(node => ({
+                    title: node.getElementsByTagName('title')[0]?.textContent || 'Sin Título',
+                    author: node.getElementsByTagName('author')[0]?.textContent || 'Desconocido',
+                    isbn: node.getElementsByTagName('isbn')[0]?.textContent || 'N/A',
+                    stock: parseInt(node.getElementsByTagName('stock')[0]?.textContent || '0'),
+                    year: node.getElementsByTagName('year')[0]?.textContent || 'N/A',
+                    genre: node.getElementsByTagName('genre')[0]?.textContent || 'N/A',
+                    price: parseFloat(node.getElementsByTagName('price')[0]?.textContent || '0').toFixed(2),
+                    image: node.getElementsByTagName('image')[0]?.textContent || 'https://via.placeholder.com/150'
+                }));
+
+                renderGrid();
+            } catch (err) {
+                errorBox.textContent = `Error de conexión: ${err.message}`;
+                errorBox.classList.remove('hidden');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        // Paginación y Renderizado de Cards
+        function renderGrid() {
+            const grid = document.getElementById('catalogGrid');
+            grid.innerHTML = '';
+
+            const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+            const endIndex = startIndex + ITEMS_PER_PAGE;
+            const pageBooks = globalBooks.slice(startIndex, endIndex);
+
+            pageBooks.forEach(book => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="card-img-container">
+                        <img src="${book.image}" alt="${book.title}" class="card-img">
+                    </div>
+                    <div class="card-body">
+                        <h3 class="card-title">${book.title}</h3>
+                        <p class="card-author">${book.author}</p>
+                        <div class="card-meta">
+                            <span><strong>ISBN:</strong> ${book.isbn}</span>
+                            <span><strong>Año:</strong> ${book.year}</span>
+                            <span><strong>Género:</strong> ${book.genre}</span>
+                        </div>
+                        <div class="card-footer">
+                            <span class="price">$${book.price}</span>
+                            <span class="stock ${book.stock > 0 ? 'stock-ok' : 'stock-out'}">
+                                ${book.stock > 0 ? `Stock: ${book.stock}` : 'Agotado'}
+                            </span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(globalBooks.length / ITEMS_PER_PAGE) || 1;
+            document.getElementById('pageIndicator').textContent = `Página ${currentPage} de ${totalPages}`;
+            document.getElementById('prevBtn').disabled = currentPage === 1;
+            document.getElementById('nextBtn').disabled = currentPage === totalPages;
+        }
+
+        document.getElementById('prevBtn').onclick = () => {
+            if (currentPage > 1) { currentPage--; renderGrid(); }
+        };
+        document.getElementById('nextBtn').onclick = () => {
+            if (currentPage < Math.ceil(globalBooks.length / ITEMS_PER_PAGE)) { currentPage++; renderGrid(); }
+        };
+
+        // Inicialización
+        loadBooks();
+    </script>
 </body>
 </html>

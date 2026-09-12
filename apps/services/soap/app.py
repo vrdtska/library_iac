@@ -1,13 +1,8 @@
-#!/usr/bin/env python3
-"""
-Microservicio Flask para gestión CRUD de libros
-Conexión a PostgreSQL con manejo de CORS y documentación Swagger
-"""
-
 import os
 import json
+import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from flasgger import Swagger
 import psycopg2
@@ -33,7 +28,7 @@ swagger = Swagger(app, template={
             "name": "Librería API Support"
         }
     },
-    "host": "localhost:5000",
+    "host": "localhost:5001",
     "basePath": "/api",
     "schemes": ["http", "https"]
 })
@@ -75,51 +70,174 @@ def serialize_rows(rows):
     return [serialize_row(row) for row in rows]
 
 # ============================================================================
+# FUNCIONES AUXILIARES PARA XML
+# ============================================================================
+
+def dict_to_xml(tag, d):
+    """Convierte un diccionario a una cadena XML."""
+    elem = ET.Element(tag)
+    for key, val in d.items():
+        child = ET.SubElement(elem, str(key))
+        child.text = str(val) if val is not None else ""
+    return ET.tostring(elem, encoding='utf-8', method='xml')
+
+def book_themes_to_xml(resultado):
+    """Estructura el diccionario anidado de temas a una cadena XML."""
+    root = ET.Element('libro')
+    
+    # Propiedades raíz
+    for key in ['id', 'titulo', 'isbn']:
+        child = ET.SubElement(root, key)
+        child.text = str(resultado.get(key, ''))
+        
+    # Arreglo de temas
+    temas_el = ET.SubElement(root, 'temas')
+    for tema in resultado.get('temas', []):
+        tema_el = ET.SubElement(temas_el, 'tema')
+        for key, val in tema.items():
+            child = ET.SubElement(tema_el, str(key))
+            child.text = str(val) if val is not None else ""
+            
+    return ET.tostring(root, encoding='utf-8', method='xml')
+
+# ============================================================================
 # ENDPOINTS CRUD PARA LIBROS
 # ============================================================================
 
 @app.route('/api/libros', methods=['GET'])
+@app.route('/books', methods=['GET']) # Alias para coincidir con la URL de tu app Electron
 def get_all_books():
-    fmt = request.args.get('format', 'json').strip().lower()
+    # Establecemos XML como predeterminado para este mock
+    fmt = request.args.get('format', 'xml').strip().lower()
     
-    libros = [
-        {"id": 1, "isbn": "11111111", "titulo": "Libro 1"},
-        {"id": 2, "isbn": "22222222", "titulo": "Libro 2"}
+    mock_books = [
+        {
+            "id": 1,
+            "title": "El Lenguaje de Programación C++",
+            "author": "Bjarne Stroustrup",
+            "isbn": "978-8478290467",
+            "stock": 15,
+            "year": 2013,
+            "genre": "Desarrollo de Software",
+            "price": 850.00,
+            "image": "https://via.placeholder.com/300x450/2563eb/ffffff?text=C%2B%2B+Stroustrup"
+        },
+        {
+            "id": 2,
+            "title": "Fundación",
+            "author": "Isaac Asimov",
+            "isbn": "978-8497599245",
+            "stock": 42,
+            "year": 1951,
+            "genre": "Ciencia Ficción",
+            "price": 350.00,
+            "image": "https://via.placeholder.com/300x450/1f2937/ffffff?text=Fundacion"
+        },
+        { 
+            "id": 3,
+            "title": "Python for Data Analysis",
+            "author": "Wes McKinney",
+            "isbn": "978-1491957660",
+            "stock": 8,
+            "year": 2017,
+            "genre": "Data Science",
+            "price": 920.50,
+            "image": "https://via.placeholder.com/300x450/10b981/ffffff?text=Python+Data"
+        },
+        {
+            "id": 4,
+            "title": "Dance Music Manual",
+            "author": "Rick Snoman",
+            "isbn": "978-0415825645",
+            "stock": 0,
+            "year": 2013,
+            "genre": "Ingeniería de Audio",
+            "price": 1150.00,
+            "image": "https://via.placeholder.com/300x450/ef4444/ffffff?text=Dance+Music"
+        },
+        {
+            "id": 5,
+            "title": "Operating System Concepts",
+            "author": "Abraham Silberschatz",
+            "isbn": "978-1118063330",
+            "stock": 20,
+            "year": 2012,
+            "genre": "Sistemas Operativos",
+            "price": 1400.00,
+            "image": "https://via.placeholder.com/300x450/8b5cf6/ffffff?text=OS+Concepts"
+        },
+        {
+            "id": 6,
+            "title": "Clean Code",
+            "author": "Robert C. Martin",
+            "isbn": "978-0132350884",
+            "stock": 5,
+            "year": 2008,
+            "genre": "Desarrollo de Software",
+            "price": 600.00,
+            "image": "https://via.placeholder.com/300x450/3b82f6/ffffff?text=Clean+Code"
+        },
+        {
+            "id": 7,
+            "title": "Dune",
+            "author": "Frank Herbert",
+            "isbn": "978-0441172719",
+            "stock": 12,
+            "year": 1965,
+            "genre": "Ciencia Ficción",
+            "price": 400.00,
+            "image": "https://via.placeholder.com/300x450/d97706/ffffff?text=Dune"
+        },
+        {
+            "id": 8,
+            "title": "Design Patterns",
+            "author": "Erich Gamma, et al.",
+            "isbn": "978-0201633610",
+            "stock": 3,
+            "year": 1994,
+            "genre": "Desarrollo de Software",
+            "price": 1050.00,
+            "image": "https://via.placeholder.com/300x450/065f46/ffffff?text=Design+Patterns"
+        },
+        {
+            "id": 9,
+            "title": "Neuromante",
+            "author": "William Gibson",
+            "isbn": "978-8445077065",
+            "stock": 0,
+            "year": 1984,
+            "genre": "Cyberpunk",
+            "price": 280.00,
+            "image": "https://via.placeholder.com/300x450/9d174d/ffffff?text=Neuromante"
+        },
+        {
+            "id": 10,
+            "title": "Grokking Algorithms",
+            "author": "Aditya Bhargava",
+            "isbn": "978-1617292231",
+            "stock": 18,
+            "year": 2016,
+            "genre": "Ciencias de la Computación",
+            "price": 750.00,
+            "image": "https://via.placeholder.com/300x450/047857/ffffff?text=Algorithms"
+        }
     ]
 
     if fmt == 'xml':
-        root = ET.Element('libros')
-        for item in libros:
-            book_el = ET.SubElement(root, 'libro')
+        root = ET.Element('catalog')
+        for item in mock_books:
+            book_el = ET.SubElement(root, 'book')
             for k, v in item.items():
                 child = ET.SubElement(book_el, str(k))
                 child.text = str(v) if v is not None else ""
+        
         xml_data = ET.tostring(root, encoding='utf-8', method='xml')
         return Response(xml_data, status=200, mimetype='application/xml')
 
-    return jsonify(libros), 200
+    return jsonify(mock_books), 200
 
 @app.route('/api/libros/<int:libro_id>', methods=['GET'])
 def get_book_by_id(libro_id):
-    """
-    Obtiene un libro por ID
-    ---
-    tags:
-      - Books
-    parameters:
-      - name: libro_id
-        in: path
-        type: integer
-        required: true
-        description: ID del libro
-    responses:
-      200:
-        description: Libro encontrado
-      404:
-        description: Libro no encontrado
-      500:
-        description: Error en el servidor
-    """
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
@@ -146,11 +264,8 @@ def get_book_by_id(libro_id):
 
 @app.route('/api/libros/isbn/<isbn>', methods=['GET'])
 def get_book_by_isbn(isbn):
-    # 1. Obtener el formato solicitado (por defecto 'json')
     fmt = request.args.get('format', 'json').strip().lower()
 
-    # 2. Consultar la base de datos (ejemplo conceptual)
-    # libro = db_find_book_by_isbn(isbn)
     libro = {
         "id": 1,
         "isbn": isbn,
@@ -165,7 +280,6 @@ def get_book_by_isbn(isbn):
             return Response(error_xml, status=404, mimetype='application/xml')
         return jsonify({"error": "Libro no encontrado"}), 404
 
-    # 3. Retornar según el parámetro format
     if fmt == 'xml':
         xml_data = dict_to_xml('libro', libro)
         return Response(xml_data, status=200, mimetype='application/xml')
@@ -174,38 +288,17 @@ def get_book_by_isbn(isbn):
 
 @app.route('/api/libros/<identifier>/temas', methods=['GET'])
 def get_book_themes(identifier):
-    """
-    Obtener nombre del libro, ISBN y sus temas con descripción.
-    Permite buscar por ID numérico o por ISBN.
-    Soporta ?format=json (default) y ?format=xml.
-    ---
-    tags:
-      - Libros
-    parameters:
-      - name: identifier
-        in: path
-        type: string
-        required: true
-        description: ID del libro o código ISBN
-      - name: format
-        in: query
-        type: string
-        required: false
-        description: Formato de respuesta (json o xml)
-    responses:
-      200:
-        description: Datos del libro y sus temas asociados
-      404:
-        description: Libro no encontrado
-    """
     fmt = request.args.get('format', 'json').strip().lower()
 
-    # 1. Obtener conexión a PostgreSQL
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        if fmt == 'xml':
+            return Response("<error><mensaje>Sin base de datos</mensaje></error>", status=500, mimetype='application/xml')
+        return jsonify({"error": "Sin base de datos"}), 500
+
+    cur = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        # 2. Consultar el libro y sus conceptos mediante JOIN
         query = """
             SELECT 
                 l.id AS libro_id,
@@ -214,9 +307,9 @@ def get_book_themes(identifier):
                 c.id AS concepto_id,
                 c.nombre AS tema_nombre,
                 c.descripcion AS tema_descripcion,
-                lc.definicion_contextual
+                lc.definicion AS definicion_contextual
             FROM libros l
-            LEFT JOIN libro_conceptos lc ON l.id = lc.libro_id
+            LEFT JOIN libros_conceptos lc ON l.id = lc.libro_id
             LEFT JOIN conceptos c ON lc.concepto_id = c.id
             WHERE l.isbn = %s OR CAST(l.id AS TEXT) = %s
             ORDER BY c.nombre ASC;
@@ -233,7 +326,6 @@ def get_book_themes(identifier):
                 )
             return jsonify({"error": "Libro no encontrado"}), 404
 
-        # 3. Estructurar la información
         first_row = rows[0]
         resultado = {
             "id": first_row["libro_id"],
@@ -251,7 +343,6 @@ def get_book_themes(identifier):
                     "definicion_contextual": row["definicion_contextual"] or ""
                 })
 
-        # 4. Respuesta en XML o JSON
         if fmt == 'xml':
             xml_output = book_themes_to_xml(resultado)
             return Response(xml_output, status=200, mimetype='application/xml')
@@ -272,34 +363,6 @@ def get_book_themes(identifier):
 
 @app.route('/api/libros/buscar', methods=['GET'])
 def search_books():
-    """
-    Busca libros por atributos (título, autor, género, categoría)
-    ---
-    tags:
-      - Books
-    parameters:
-      - name: titulo
-        in: query
-        type: string
-        description: Título del libro (búsqueda parcial)
-      - name: categoria_id
-        in: query
-        type: integer
-        description: ID de la categoría
-      - name: formato_id
-        in: query
-        type: integer
-        description: ID del formato
-      - name: anio_publicacion
-        in: query
-        type: integer
-        description: Año de publicación
-    responses:
-      200:
-        description: Resultados de búsqueda
-      500:
-        description: Error en el servidor
-    """
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
@@ -348,54 +411,11 @@ def search_books():
 
 @app.route('/api/libros', methods=['POST'])
 def create_book():
-    """
-    Crea un nuevo libro
-    ---
-    tags:
-      - Books
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - titulo
-            - formato_id
-            - categoria_id
-          properties:
-            titulo:
-              type: string
-            subtitulo:
-              type: string
-            isbn:
-              type: string
-            anio_publicacion:
-              type: integer
-            descripcion:
-              type: string
-            precio:
-              type: number
-            stock:
-              type: integer
-            formato_id:
-              type: integer
-            categoria_id:
-              type: integer
-    responses:
-      201:
-        description: Libro creado exitosamente
-      400:
-        description: Datos inválidos
-      500:
-        description: Error en el servidor
-    """
     if not request.json:
         return jsonify({"error": "Se requiere JSON en el cuerpo de la solicitud"}), 400
     
     data = request.json
     
-    # Validación básica
     if not data.get('titulo') or not data.get('formato_id') or not data.get('categoria_id'):
         return jsonify({"error": "Campos requeridos: titulo, formato_id, categoria_id"}), 400
     
@@ -436,50 +456,6 @@ def create_book():
 
 @app.route('/api/libros/<int:libro_id>', methods=['PUT'])
 def update_book(libro_id):
-    """
-    Actualiza un libro existente
-    ---
-    tags:
-      - Books
-    parameters:
-      - name: libro_id
-        in: path
-        type: integer
-        required: true
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          properties:
-            titulo:
-              type: string
-            subtitulo:
-              type: string
-            isbn:
-              type: string
-            anio_publicacion:
-              type: integer
-            descripcion:
-              type: string
-            precio:
-              type: number
-            stock:
-              type: integer
-            formato_id:
-              type: integer
-            categoria_id:
-              type: integer
-    responses:
-      200:
-        description: Libro actualizado exitosamente
-      400:
-        description: Datos inválidos
-      404:
-        description: Libro no encontrado
-      500:
-        description: Error en el servidor
-    """
     if not request.json:
         return jsonify({"error": "Se requiere JSON en el cuerpo de la solicitud"}), 400
     
@@ -490,14 +466,12 @@ def update_book(libro_id):
     try:
         data = request.json
         
-        # Verificar que el libro existe
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM libros WHERE id = %s", (libro_id,))
         if cursor.fetchone() is None:
             conn.close()
             return jsonify({"error": "Libro no encontrado"}), 404
         
-        # Construir la consulta UPDATE dinámicamente
         updates = []
         params = []
         
@@ -514,17 +488,8 @@ def update_book(libro_id):
         params.append(libro_id)
         
         query = f"UPDATE libros SET {', '.join(updates)} WHERE id = %s RETURNING *"
-        
         cursor.execute(query, params)
-        updated_book = cursor.fetchone()
         conn.commit()
-        
-        # Obtener como diccionario
-        cursor.execute("""
-            SELECT id, titulo, subtitulo, isbn, anio_publicacion, descripcion, 
-                   precio, stock, formato_id, categoria_id, created_at, updated_at
-            FROM libros WHERE id = %s
-        """, (libro_id,))
         
         cursor_dict = conn.cursor(cursor_factory=RealDictCursor)
         cursor_dict.execute("""
@@ -546,38 +511,17 @@ def update_book(libro_id):
 
 @app.route('/api/libros/<int:libro_id>', methods=['DELETE'])
 def delete_book(libro_id):
-    """
-    Elimina un libro
-    ---
-    tags:
-      - Books
-    parameters:
-      - name: libro_id
-        in: path
-        type: integer
-        required: true
-    responses:
-      204:
-        description: Libro eliminado exitosamente
-      404:
-        description: Libro no encontrado
-      500:
-        description: Error en el servidor
-    """
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
     
     try:
         cursor = conn.cursor()
-        
-        # Verificar que el libro existe
         cursor.execute("SELECT id FROM libros WHERE id = %s", (libro_id,))
         if cursor.fetchone() is None:
             conn.close()
             return jsonify({"error": "Libro no encontrado"}), 404
         
-        # Eliminar el libro
         cursor.execute("DELETE FROM libros WHERE id = %s", (libro_id,))
         conn.commit()
         cursor.close()
@@ -595,15 +539,6 @@ def delete_book(libro_id):
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """
-    Verifica el estado del servicio
-    ---
-    tags:
-      - Health
-    responses:
-      200:
-        description: Servicio en buen estado
-    """
     return jsonify({
         "status": "ok",
         "message": "Library Books API is running"
@@ -611,17 +546,6 @@ def health_check():
 
 @app.route('/api/db-health', methods=['GET'])
 def db_health_check():
-    """
-    Verifica la conexión a la base de datos
-    ---
-    tags:
-      - Health
-    responses:
-      200:
-        description: Conexión a BD exitosa
-      500:
-        description: Error de conexión
-    """
     conn = get_db_connection()
     if not conn:
         return jsonify({
@@ -651,32 +575,25 @@ def db_health_check():
 
 @app.errorhandler(404)
 def not_found(error):
-    """Maneja errores 404"""
     return jsonify({"error": "Endpoint no encontrado"}), 404
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Maneja errores 500"""
     return jsonify({"error": "Error interno del servidor"}), 500
-
-@app.before_request
-def before_request():
-    """Configuración antes de cada solicitud"""
-    # CORS ya se maneja con Flask-CORS
-    pass
 
 # ============================================================================
 # PUNTO DE ENTRADA
 # ============================================================================
 
 if __name__ == '__main__':
-    port = int(os.getenv('FLASK_PORT', 5000))
+    # Puerto ajustado a 5001 por defecto como se solicitó
+    port = int(os.getenv('FLASK_PORT', 5001))
     debug = os.getenv('FLASK_DEBUG', 'False') == 'True'
     
     print(f"""
     ╔════════════════════════════════════════════════════════════╗
     ║  Library Books Microservice - Flask API                   ║
-    ║  Version: 1.0.0                                           ║
+    ║  Version: 1.0.1 (XML Refactored)                          ║
     ║  Database: PostgreSQL                                     ║
     ║  CORS: Enabled                                            ║
     ║  Swagger: http://localhost:{port}/apidocs                  ║
