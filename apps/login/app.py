@@ -72,13 +72,32 @@ def health_check():
     except Exception as e:
         return format_response({"status": "error", "message": str(e)}, 500)
 
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 def enviar_correo_verificacion(email_destino, enlace):
-    """Función stub para enviar correos. Configura tu SMTP real aquí."""
-    # Ejemplo básico con SMTP (requerirá variables de entorno SMTP_SERVER, SMTP_USER, etc.)
-    print(f"--- SIMULACIÓN DE CORREO ---")
-    print(f"Para: {email_destino}")
-    print(f"Haz clic aquí para verificar tu cuenta: {enlace}")
-    print(f"----------------------------")
+    """Envía un correo real usando un SMTP Relay de terceros."""
+    remitente = "sistema@tudominio.com" # Cambia esto por un correo válido registrado en tu proveedor
+    
+    msg = MIMEMultipart()
+    msg['From'] = remitente
+    msg['To'] = email_destino
+    msg['Subject'] = "Verifica tu cuenta en el repositorio"
+    
+    cuerpo = f"Hola,\n\nPor favor haz clic en el siguiente enlace para verificar tu cuenta y acceder al sistema:\n{enlace}\n\nSi no solicitaste este registro, ignora este correo."
+    msg.attach(MIMEText(cuerpo, 'plain'))
+    
+    try:
+        # Conexión al proveedor transaccional en el puerto 587
+        server = smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT")))
+        server.starttls() # Encripta la comunicación (requerido por SendGrid/Brevo)
+        server.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD"))
+        server.send_message(msg)
+        server.quit()
+    except Exception as e:
+        print(f"Error enviando correo: {e}")
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -118,7 +137,7 @@ def register():
         # Generar token de verificación que expira en 3600 segundos (1 hora)
         token = serializer.dumps(data['email'], salt='email-verify-salt')
         # Asumiendo que ejecutas en localhost:5000; ajusta el dominio en producción
-        verify_link = f"http://127.0.0.1:5000/verify-email/{token}?format=json"
+        verify_link = f"http://34.51.80.78:5000/verify-email/{token}?format=json"
         
         enviar_correo_verificacion(data['email'], verify_link)
 
