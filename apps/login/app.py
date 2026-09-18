@@ -8,12 +8,24 @@ from dotenv import load_dotenv
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 import smtplib
 from email.mime.text import MIMEText
+from flasgger import Swagger    
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 serializer = URLSafeTimedSerializer(app.secret_key)
+
+# --- CONFIGURACIÓN DE SWAGGER ---
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "Microservicio de Autenticación",
+        "description": "API para el manejo de usuarios, registro y sesiones (Soporta JSON y XML dinámicamente mediante ?format=)",
+        "version": "1.0.0"
+    }
+}
+swagger = Swagger(app, template=swagger_template)
 
 # --- CONEXIÓN A DB ---
 def get_db_connection():
@@ -134,10 +146,10 @@ def register():
         cur.close()
         conn.close()
 
-        # Generar token de verificación que expira en 3600 segundos (1 hora)
         token = serializer.dumps(data['email'], salt='email-verify-salt')
-        # Asumiendo que ejecutas en localhost:5000; ajusta el dominio en producción
-        verify_link = f"http://34.51.80.78:5000/verify-email/{token}?format=json"
+        
+        # NUEVA LÍNEA: request.host_url detecta automáticamente el host actual (ej. http://34.51.80.78:5000/)
+        verify_link = f"{request.host_url}verify-email/{token}?format=json"
         
         enviar_correo_verificacion(data['email'], verify_link)
 
