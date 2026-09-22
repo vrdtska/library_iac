@@ -1,0 +1,7 @@
+## REFLEXION
+### Santiago López Cervantes
+
+En esta actividad, aprendí de manera experimental como poder integrar el uso de verificacion de cuentas y modularidad de servicios mediante la aplicación de mi conocimiento de backend, bases de datos, redes e integración para poder intentar ligar el contenido de las actividades pasadas en esta misma actividad. El intento que hice como podrá ver, tiene la funcionalidad de poder aplicar un hash a la contraseña, trata de enviar un correo mediante un servicio de verificación llamado sendgrid y de esta manera, integramos un sistema monolítico seguro, parte modular de un sistema más grande.
+Se utiliza HATEOAS para poder verificar automáticamente el usuario y además, se normalizó de manera más profunda la tabla con la que interactúa este componente. Finalmente, la integración del microservicio se habilitó en el puerto 5000 de mi instancia de GCP en la nube.
+
+Poder aprender esto habilita un nuevo repertorio de habilidades. Creo que pude haber terminado si hubiera tomado la ruta del captcha, ya que enviar correos de manera verificable en desde la instancia conlleva una complejidad mayor a solo usar captcha o servicios SMTP de google o outlook. A futuro, tendré esto en mente.
