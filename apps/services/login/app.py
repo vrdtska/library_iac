@@ -167,7 +167,25 @@ def register():
         token = serializer.dumps(data['email'], salt='email-verify-salt')
         verify_link = f"{request.host_url}verify-email/{token}?format=json"
         
-        enviar_correo_verificacion(data['email'], verify_link)
+        # enviar_correo_verificacion(data['email'], verify_link)
+        
+        # Generar token de verificación que expira en 1 hora
+        token = serializer.dumps(data['email'], salt='email-verify-salt')
+        verify_link = f"{request.host_url}verify-email/{token}?format=json"
+        
+        # OMITIMOS EL ENVÍO REAL PARA EL MVP
+        # enviar_correo_verificacion(data['email'], verify_link)
+        print(f"\n[MVP TEST] Enlace HATEOAS generado: {verify_link}\n")
+        
+        return format_response({
+            "message": "Usuario registrado (Modo MVP: Usa el enlace adjunto para verificar)",
+            "id_usuario": new_user_id,
+            "_links": {
+                "self": "/register",
+                "verify_email": verify_link,  # Copias este enlace para probar el GET
+                "login": "/login"
+            }
+        }, 201)
         
         return format_response({
             "message": "Usuario registrado exitosamente. Revisa tu correo.",
