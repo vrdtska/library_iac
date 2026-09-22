@@ -186,12 +186,6 @@ def register():
                 "login": "/login"
             }
         }, 201)
-        
-        return format_response({
-            "message": "Usuario registrado exitosamente. Revisa tu correo.",
-            "id_usuario": new_user_id,
-            "_links": {"self": "/register", "verify_email": verify_link, "login": "/login"}
-        }, 201)
     
     except psycopg2.IntegrityError:
         conn.rollback()
