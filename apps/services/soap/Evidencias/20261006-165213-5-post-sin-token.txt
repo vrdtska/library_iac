@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library><error>Falta la cabecera Authorization: Bearer &lt;access_token&gt;</error><error_code>missing_token</error_code></library>
+HTTP 401

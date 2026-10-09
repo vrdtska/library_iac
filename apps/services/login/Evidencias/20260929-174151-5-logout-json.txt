@@ -1,0 +1,3 @@
+{"message":"Sesion cerrada exitosamente"}
+
+HTTP 200

@@ -1,18 +1,14 @@
 {
   "name": "library-electron-app",
-  "version": "1.0.0",
-  "description": "Book Catalog Electron App",
+  "version": "2.0.0",
+  "description": "Catalogo de libros en XML que consume el microservicio Flask (apps/services/soap)",
   "main": "main.js",
   "scripts": {
     "start": "electron ."
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "electron": "^32.0.0"
-  },
-  "dependencies": {
-    "xml2js": "^0.6.2"
   }
 }

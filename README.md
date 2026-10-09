@@ -70,9 +70,10 @@ La restricción de administrador único se implementa con un índice único cond
 
 El esquema base de la base de datos está definido en:
 
-- [db/schema.sql](db/schema.sql)
-- [data/db_schema.sql](data/db_schema.sql)
-- [data/library_schema.sql](data/library_schema.sql)
+- [apps/db/00_create_database.sql](apps/db/00_create_database.sql)
+- [apps/db/01_schema.sql](apps/db/01_schema.sql)
+- [apps/db/02_seed_30_per_table.sql](apps/db/02_seed_30_per_table.sql)
+- [apps/db/03_migracion_verificado.sql](apps/db/03_migracion_verificado.sql) (migración para bases existentes)
 
 La estructura principal incluye:
 
@@ -147,18 +148,58 @@ Luego reinicia PostgreSQL:
 sudo systemctl restart postgresql
 ```
 
-## 8. Importación del esquema
+### 7.4 Opción Docker (la que está montada en este proyecto)
 
-Desde la raíz del proyecto, ejecuta:
+Si no quieres instalar PostgreSQL en el host, usa el contenedor que ya corre en
+este entorno: `freshtrack_db` (`postgres:17-alpine`) publicado en `0.0.0.0:5432`.
 
 ```bash
-psql -h localhost -U library_user -d library -f /home/vrdtska/Documents/integracion/libreria_eg/data/db_schema.sql
+docker ps --filter name=freshtrack_db
+# CONTAINER ID   IMAGE              PORTS
+# ...            postgres:17-alpine 0.0.0.0:5432->5432/tcp
 ```
 
-Si se desea usar el esquema del proyecto ya definido en el repositorio:
+Credenciales del contenedor: superusuario `postgres` / `999`.
+La base `library` y el rol `library_user` / `library666` se crean con el script
+`apps/db/00_create_database.sql`, que no toca la base `retail_perecederos` del
+otro proyecto:
 
 ```bash
-psql -h localhost -U library_user -d library -f /home/vrdtska/Documents/integracion/libreria_eg/db/schema.sql
+PGPASSWORD=999 psql -h 127.0.0.1 -p 5432 -U postgres -f apps/db/00_create_database.sql
+PGPASSWORD=library666 psql -h 127.0.0.1 -p 5432 -U library_user -d library -f apps/db/01_schema.sql
+PGPASSWORD=library666 psql -h 127.0.0.1 -p 5432 -U library_user -d library -f apps/db/02_seed_30_per_table.sql
+```
+
+Comprobación:
+
+```bash
+PGPASSWORD=library666 psql -h 127.0.0.1 -p 5432 -U library_user -d library \
+  -c "select count(*) as libros from libros"
+```
+
+> Nota de puertos en este entorno: **5000** la ocupa `iac-proyecto/run.py`,
+> así que el microservicio de autenticación corre en **5002** y el de libros en
+> **5001**. Ambos puertos se configuran con `FLASK_PORT` en su `.env`.
+
+## 8. Importación del esquema
+
+Desde la raíz del proyecto, ejecuta en orden:
+
+```bash
+# 1. Base de datos + rol (requiere superusuario)
+PGPASSWORD=999 psql -h 127.0.0.1 -p 5432 -U postgres -f apps/db/00_create_database.sql
+
+# 2. Tablas, índices y restricciones
+PGPASSWORD=library666 psql -h 127.0.0.1 -p 5432 -U library_user -d library -f apps/db/01_schema.sql
+
+# 3. Datos de prueba (30 registros por tabla)
+PGPASSWORD=library666 psql -h 127.0.0.1 -p 5432 -U library_user -d library -f apps/db/02_seed_30_per_table.sql
+```
+
+Si la base ya existía con el esquema anterior, aplica además la migración:
+
+```bash
+PGPASSWORD=library666 psql -h 127.0.0.1 -p 5432 -U library_user -d library -f apps/db/03_migracion_verificado.sql
 ```
 
 ## 9. Carga de datos iniciales recomendada
@@ -287,12 +328,12 @@ psql -h localhost -U library_user -d library < backup_library.sql
 El sistema está diseñado como una aplicación monolítica modular con SQL en PostgreSQL, organizada alrededor de la tabla principal `libros`, con relaciones muchos a muchos y soporte para usuarios, imágenes y conceptos. La estructura de datos cumple con todas las reglas del caso de uso y está lista para ser implementada en CentOS 10 Stream con una configuración de base de datos PostgreSQL usando:
 
 - usuario: `library_user`
-- password: `999`
+- password: `library666`
 - base de datos: `library`
 
 ## 15. Archivo SQL principal
 
 El esquema final usable se encuentra en:
 
-- [db/schema.sql](db/schema.sql)
-- [data/db_schema.sql](data/db_schema.sql)
+- [apps/db/00_create_database.sql](apps/db/00_create_database.sql)
+- [apps/db/01_schema.sql](apps/db/01_schema.sql)

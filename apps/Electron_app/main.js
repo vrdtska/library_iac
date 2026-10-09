@@ -1,35 +1,34 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+  // El icono es opcional: si el archivo no existe, Electron usa el suyo.
+  const icono = path.join(__dirname, 'icon.png');
+  const opciones = {
+    width: 1280,
+    height: 860,
+    minWidth: 900,
+    minHeight: 600,
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false, // For simplicity in this example, normally you'd use a preload script
+      contextIsolation: false, // La app es local; ver nota de seguridad en README.md
     },
-    icon: path.join(__dirname, 'icon.png')
-  });
+  };
+  if (fs.existsSync(icono)) opciones.icon = icono;
 
+  const win = new BrowserWindow(opciones);
   win.loadFile('index.html');
-  
-  // win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
   createWindow();
-
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });

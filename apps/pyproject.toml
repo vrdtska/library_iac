@@ -8,6 +8,12 @@ dependencies = [
     "flasgger==0.9.7.1",
     "flask==2.3.3",
     "flask-cors==4.0.0",
-    "psycopg2-binary>=2.9.9",
+    "psycopg[binary]>=3.2",
     "python-dotenv==1.0.0",
+    "PyJWT>=2.8",
+]
+
+[tool.uv.workspace]
+members = [
+    "Python_app",
 ]

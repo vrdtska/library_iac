@@ -1,20 +1,37 @@
 -- db/01_schema.sql
--- Conectarse a la base de datos 'library_db' antes de ejecutar.
+-- Esquema normalizado de la librería. Conectarse ANTES de ejecutar:
+--     psql -U library_user -d library -f 01_schema.sql
+--
+-- Reglas de negocio incluidas:
+--   * 'libros' es la entidad principal (ISBN como clave primaria).
+--   * Un libro tiene varios autores, varios géneros y varias imágenes.
+--   * Un concepto puede repetirse en distintos libros con definición propia.
+--   * 'formatos' y 'categorias' son catálogos independientes.
+--   * Existe como máximo un administrador (índice único parcial).
 
+-- ---------------------------------------------------------------------------
+-- Control de acceso
+-- ---------------------------------------------------------------------------
 CREATE TABLE roles (
     id_rol SERIAL PRIMARY KEY,
     nombre_rol VARCHAR(50) UNIQUE NOT NULL
 );
 
+-- 'password_hash' vive en la cuenta del usuario: no hay tabla de contraseñas.
+-- 'verificado' lo consume el microservicio de autenticación (apps/services/login).
 CREATE TABLE usuarios (
     id_usuario SERIAL PRIMARY KEY,
     email VARCHAR(150) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     id_rol INT NOT NULL REFERENCES roles(id_rol) ON DELETE RESTRICT,
-    usuarios ADD COLUMN verificado BOOLEAN DEFAULT FALSE,
+    verificado BOOLEAN NOT NULL DEFAULT FALSE,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Regla de negocio: sólo puede existir UN administrador (id_rol = 1)
+CREATE UNIQUE INDEX unico_administrador_idx ON usuarios(id_rol) WHERE id_rol = 1;
+
+-- Perfil 1:1 con la cuenta (normalizado, sin datos personales en 'usuarios')
 CREATE TABLE perfiles_usuario (
     id_perfil SERIAL PRIMARY KEY,
     id_usuario INT UNIQUE NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
@@ -24,11 +41,9 @@ CREATE TABLE perfiles_usuario (
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE 
-
--- Regla de negocio: Sólo puede existir UN administrador (asumiendo id_rol = 1)
-CREATE UNIQUE INDEX unico_administrador_idx ON usuarios(id_rol) WHERE id_rol = 1;
-
+-- ---------------------------------------------------------------------------
+-- Catálogos independientes
+-- ---------------------------------------------------------------------------
 CREATE TABLE formatos (
     id_formato SERIAL PRIMARY KEY,
     nombre_formato VARCHAR(100) UNIQUE NOT NULL
@@ -39,6 +54,9 @@ CREATE TABLE categorias (
     nombre_categoria VARCHAR(100) UNIQUE NOT NULL
 );
 
+-- ---------------------------------------------------------------------------
+-- Entidades del catálogo
+-- ---------------------------------------------------------------------------
 CREATE TABLE autores (
     id_autor SERIAL PRIMARY KEY,
     nombre_autor VARCHAR(150) NOT NULL
@@ -77,6 +95,7 @@ CREATE TABLE libro_genero (
     PRIMARY KEY (isbn, id_genero)
 );
 
+-- Un mismo concepto puede aparecer en distintos libros con definiciones distintas
 CREATE TABLE libro_concepto (
     isbn VARCHAR(20) NOT NULL REFERENCES libros(isbn) ON DELETE CASCADE,
     id_concepto INT NOT NULL REFERENCES conceptos(id_concepto) ON DELETE CASCADE,
@@ -92,5 +111,9 @@ CREATE TABLE libro_imagenes (
     texto_alternativo VARCHAR(255)
 );
 
--- Regla de negocio: Sólo puede haber una portada por libro
+-- Regla de negocio: sólo una portada por libro
 CREATE UNIQUE INDEX unica_portada_por_libro_idx ON libro_imagenes(isbn) WHERE es_portada = TRUE;
+
+-- Índices de apoyo para las búsquedas del microservicio
+CREATE INDEX libros_titulo_idx ON libros (titulo);
+CREATE INDEX libro_imagenes_isbn_idx ON libro_imagenes (isbn);

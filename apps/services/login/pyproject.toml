@@ -1,13 +1,16 @@
 [project]
 name = "login"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0"
+description = "Microservicio de autenticacion y gestion de usuarios (Flask + Psycopg 3 + PostgreSQL)"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "flask==3.0.0",
-    "itsdangerous>=2.2.0",
-    "psycopg2-binary>=2.9.13",
-    "python-dotenv==1.0.0",
     "werkzeug==3.0.1",
+    "itsdangerous>=2.2.0",
+    "psycopg[binary]>=3.2",
+    "python-dotenv==1.0.0",
+    "flasgger==0.9.7.1",
+    "requests>=2.31.0",
+    "PyJWT>=2.8",
 ]

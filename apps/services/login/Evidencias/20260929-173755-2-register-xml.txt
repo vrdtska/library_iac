@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response><message>Usuario registrado exitosamente</message><id_usuario>31</id_usuario><email>prueba_20260929-173755@example.com</email><verificado>True</verificado><_links><self>/register</self><verify_email>http://127.0.0.1:5002/verify-email/InBydWViYV8yMDI2MDkyOS0xNzM3NTVAZXhhbXBsZS5jb20i.arxL0w.IjkKTm61hOIYrAPWxFBIch8vtSE?format=json</verify_email><login>/login</login></_links></response>
+HTTP 201

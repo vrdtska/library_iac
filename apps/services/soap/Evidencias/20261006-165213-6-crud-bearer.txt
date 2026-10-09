@@ -1,0 +1,10 @@
+--- POST /api/books ---
+<?xml version="1.0" encoding="UTF-8"?>
+<book><isbn>978-999-000-00-0</isbn><titulo>Libro JWT Test</titulo><autores /><anio>2024</anio><precio>199.99</precio><imagenes /><portada /><stock>5</stock><formato>Tapa Blanda</formato><categoria>Novela</categoria><generos /><conceptos /></book>
+HTTP 201
+--- GET /api/books/978-999-000-00-0 sin token (publico) ---
+HTTP 200
+--- PATCH con Bearer ---
+HTTP 200
+--- DELETE con Bearer ---
+HTTP 204

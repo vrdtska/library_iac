@@ -1,11 +1,5 @@
-<<<<<<< HEAD
 node_modules/
 *.env
 __pycache__/
 
 *.zip
-=======
-.venv/
-
-*.env
->>>>>>> app_monolitico

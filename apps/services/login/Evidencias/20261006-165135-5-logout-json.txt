@@ -1,0 +1,3 @@
+{"message":"Sesion cerrada exitosamente","refresh_token_revocado":true}
+
+HTTP 200

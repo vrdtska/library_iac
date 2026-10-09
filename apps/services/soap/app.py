@@ -1,603 +1,1140 @@
-import os
-import json
-import xml.etree.ElementTree as ET
-from dotenv import load_dotenv
-from flask import Flask, request, jsonify, Response
-from flask_cors import CORS
-from flasgger import Swagger
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from decimal import Decimal
-from datetime import datetime
+"""Microservicio de libros de la libreria en linea.
 
-# Cargar variables de entorno
+CRUD de libros sobre PostgreSQL (Psycopg 3) con CORS habilitado y
+documentacion Swagger. Todas las respuestas admiten negociacion de formato:
+
+    GET /books              -> XML (raiz <library>, <book isbn="...">)
+    GET /books?format=json  -> JSON
+    ?page=1&limit=8         -> paginacion (carga por peticion)
+
+El XML generado sigue el diseno documentado en apps/services/soap/library.xml:
+libro, autores, generos, precio, stock, formato, imagenes y conceptos.
+"""
+
+import os
+import xml.etree.ElementTree as ET
+from datetime import date, datetime
+from decimal import Decimal
+from functools import wraps
+from pathlib import Path
+
+import jwt
+import psycopg
+import sys
+from dotenv import load_dotenv
+from flasgger import Swagger
+from flask import Flask, Response, g, jsonify, request, send_from_directory
+from flask_cors import CORS
+from psycopg.rows import dict_row
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common import redis_store  # Redis: revocacion JWT + cache catalogo
+
 load_dotenv()
 
-# Inicializar Flask
 app = Flask(__name__)
-CORS(app)
+# CORS restringido a origenes cliente (CORS_ORIGINS); "*" solo en desarrollo.
+_origenes = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+CORS(app, origins=_origenes or "*")
 
-# Configuración de Swagger
-swagger = Swagger(app, template={
-    "swagger": "2.0",
-    "info": {
-        "title": "Library Books API",
-        "description": "API REST para gestión de libros en una librería en línea",
-        "version": "1.0.0",
-        "contact": {
-            "name": "Librería API Support"
-        }
-    },
-    "host": "localhost:5001",
-    "basePath": "/api",
-    "schemes": ["http", "https"]
-})
+# ---------------------------------------------------------------------------
+# Configuracion
+# ---------------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent          # apps/services/soap
+# apps/uploads vive dos niveles arriba de este archivo (apps/services/soap)
+UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR") or BASE_DIR.parents[1] / "uploads")
+CURRENCY = os.getenv("CURRENCY", "USD")
+DEFAULT_LIMIT = int(os.getenv("DEFAULT_LIMIT", "8"))
+MAX_LIMIT = int(os.getenv("MAX_LIMIT", "100"))
 
-# Configuración de base de datos
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', 5432),
-    'database': os.getenv('DB_NAME', 'library'),
-    'user': os.getenv('DB_USER', 'library_user'),
-    'password': os.getenv('DB_PASSWORD', 'library666')
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432"),
+    "dbname": os.getenv("DB_NAME", "library"),
+    "user": os.getenv("DB_USER", "library_user"),
+    "password": os.getenv("DB_PASSWORD", "library666"),
 }
 
+# ---------------------------------------------------------------------------
+# JWT (JSON Web Token)
+#
+# ESTE servicio es el VERIFICADOR. Comprueba la firma con el secreto
+# compartido JWT_SECRET_KEY (mismo valor en los dos .env) y NO hace ninguna
+# llamada HTTP al microservicio de login: el token se valida en memoria.
+# Asi no se encadena un microservicio detras de la autenticacion y las
+# lecturas (GET) siguen siendo publicas.
+# ---------------------------------------------------------------------------
+JWT_SECRET = os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY", "")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+# Roles admitidos para escribir. Vacio = cualquier usuario autenticado.
+JWT_WRITE_ROLES = {
+    rol.strip()
+    for rol in os.getenv("JWT_WRITE_ROLES", "").split(",")
+    if rol.strip()
+}
+# Metodos que exigen Authorization: Bearer <access_token>.
+PROTECTED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# Cache del catalogo (fail-open): lista 60 s, detalle 120 s.
+CACHE_LIST_TTL = int(os.getenv("BOOKS_CACHE_LIST_TTL", "60"))
+CACHE_ITEM_TTL = int(os.getenv("BOOKS_CACHE_ITEM_TTL", "120"))
+
+swagger = Swagger(
+    app,
+    template={
+        "swagger": "2.0",
+        "info": {
+            "title": "Library Books API",
+            "description": (
+                "API REST/XML de libros de la libreria. Soporta ?format=xml|json "
+                "(XML por defecto) y paginacion con ?page=&limit=."
+            ),
+            "version": "2.0.0",
+        },
+        "basePath": "/",
+        "schemes": ["http", "https"],
+    },
+)
+
+
 def get_db_connection():
-    """Obtiene una conexión a la base de datos PostgreSQL"""
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        return conn
-    except psycopg2.Error as e:
-        print(f"Error de conexión a la base de datos: {e}")
-        return None
+    """Abre conexion a PostgreSQL devolviendo cada fila como diccionario."""
+    return psycopg.connect(**DB_CONFIG, row_factory=dict_row)
+
+
+# ---------------------------------------------------------------------------
+# Utilidades de formato
+# ---------------------------------------------------------------------------
+def serialize(value):
+    """Convierte tipos de PostgreSQL a tipos serializables por Flask/JSON."""
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
 
 def serialize_row(row):
-    """Serializa una fila de base de datos a JSON"""
-    if row is None:
-        return None
-    result = {}
-    for key, value in row.items():
-        if isinstance(value, Decimal):
-            result[key] = float(value)
-        elif isinstance(value, datetime):
-            result[key] = value.isoformat()
-        else:
-            result[key] = value
-    return result
+    return None if row is None else {k: serialize(v) for k, v in row.items()}
+
 
 def serialize_rows(rows):
-    """Serializa múltiples filas de base de datos a JSON"""
-    return [serialize_row(row) for row in rows]
+    return [serialize_row(r) for r in rows]
 
-# ============================================================================
-# FUNCIONES AUXILIARES PARA XML
-# ============================================================================
 
-def dict_to_xml(tag, d):
-    """Convierte un diccionario a una cadena XML."""
-    elem = ET.Element(tag)
-    for key, val in d.items():
-        child = ET.SubElement(elem, str(key))
-        child.text = str(val) if val is not None else ""
-    return ET.tostring(elem, encoding='utf-8', method='xml')
+def dict_to_xml(tag, data):
+    """Convierte un diccionario (con listas y diccionarios anidados) a XML."""
+    root = ET.Element(tag)
+    for key, value in data.items():
+        if isinstance(value, list):
+            container = ET.SubElement(root, str(key))
+            for item in value:
+                if isinstance(item, dict):
+                    container.append(ET.fromstring(dict_to_xml("item", item)))
+                else:
+                    ET.SubElement(container, "item").text = str(item)
+        elif isinstance(value, dict):
+            root.append(ET.fromstring(dict_to_xml(str(key), value)))
+        else:
+            child = ET.SubElement(root, str(key))
+            child.text = "" if value is None else str(value)
+    return ET.tostring(root, encoding="unicode")
 
-def book_themes_to_xml(resultado):
-    """Estructura el diccionario anidado de temas a una cadena XML."""
-    root = ET.Element('libro')
-    
-    # Propiedades raíz
-    for key in ['id', 'titulo', 'isbn']:
-        child = ET.SubElement(root, key)
-        child.text = str(resultado.get(key, ''))
-        
-    # Arreglo de temas
-    temas_el = ET.SubElement(root, 'temas')
-    for tema in resultado.get('temas', []):
-        tema_el = ET.SubElement(temas_el, 'tema')
-        for key, val in tema.items():
-            child = ET.SubElement(tema_el, str(key))
-            child.text = str(val) if val is not None else ""
-            
-    return ET.tostring(root, encoding='utf-8', method='xml')
 
-# ============================================================================
-# ENDPOINTS CRUD PARA LIBROS
-# ============================================================================
+def format_response(data, status_code=200, root="library", xml_str=None):
+    """Responde JSON o XML segun ?format=. Sin ?format responde XML."""
+    fmt = request.args.get("format", "xml").strip().lower()
+    if fmt == "json":
+        return jsonify(data), status_code
+    cuerpo = xml_str if xml_str is not None else dict_to_xml(root, data)
+    return Response(
+        '<?xml version="1.0" encoding="UTF-8"?>\n' + cuerpo,
+        status=status_code,
+        mimetype="application/xml",
+    )
 
-@app.route('/api/libros', methods=['GET'])
-@app.route('/books', methods=['GET']) # Alias para coincidir con la URL de tu app Electron
-def get_all_books():
-    # Establecemos XML como predeterminado para este mock
-    fmt = request.args.get('format', 'xml').strip().lower()
-    
-    mock_books = [
-        {
-            "id": 1,
-            "title": "El Lenguaje de Programación C++",
-            "author": "Bjarne Stroustrup",
-            "isbn": "978-8478290467",
-            "stock": 15,
-            "year": 2013,
-            "genre": "Desarrollo de Software",
-            "price": 850.00,
-            "image": "https://via.placeholder.com/300x450/2563eb/ffffff?text=C%2B%2B+Stroustrup"
-        },
-        {
-            "id": 2,
-            "title": "Fundación",
-            "author": "Isaac Asimov",
-            "isbn": "978-8497599245",
-            "stock": 42,
-            "year": 1951,
-            "genre": "Ciencia Ficción",
-            "price": 350.00,
-            "image": "https://via.placeholder.com/300x450/1f2937/ffffff?text=Fundacion"
-        },
-        { 
-            "id": 3,
-            "title": "Python for Data Analysis",
-            "author": "Wes McKinney",
-            "isbn": "978-1491957660",
-            "stock": 8,
-            "year": 2017,
-            "genre": "Data Science",
-            "price": 920.50,
-            "image": "https://via.placeholder.com/300x450/10b981/ffffff?text=Python+Data"
-        },
-        {
-            "id": 4,
-            "title": "Dance Music Manual",
-            "author": "Rick Snoman",
-            "isbn": "978-0415825645",
-            "stock": 0,
-            "year": 2013,
-            "genre": "Ingeniería de Audio",
-            "price": 1150.00,
-            "image": "https://via.placeholder.com/300x450/ef4444/ffffff?text=Dance+Music"
-        },
-        {
-            "id": 5,
-            "title": "Operating System Concepts",
-            "author": "Abraham Silberschatz",
-            "isbn": "978-1118063330",
-            "stock": 20,
-            "year": 2012,
-            "genre": "Sistemas Operativos",
-            "price": 1400.00,
-            "image": "https://via.placeholder.com/300x450/8b5cf6/ffffff?text=OS+Concepts"
-        },
-        {
-            "id": 6,
-            "title": "Clean Code",
-            "author": "Robert C. Martin",
-            "isbn": "978-0132350884",
-            "stock": 5,
-            "year": 2008,
-            "genre": "Desarrollo de Software",
-            "price": 600.00,
-            "image": "https://via.placeholder.com/300x450/3b82f6/ffffff?text=Clean+Code"
-        },
-        {
-            "id": 7,
-            "title": "Dune",
-            "author": "Frank Herbert",
-            "isbn": "978-0441172719",
-            "stock": 12,
-            "year": 1965,
-            "genre": "Ciencia Ficción",
-            "price": 400.00,
-            "image": "https://via.placeholder.com/300x450/d97706/ffffff?text=Dune"
-        },
-        {
-            "id": 8,
-            "title": "Design Patterns",
-            "author": "Erich Gamma, et al.",
-            "isbn": "978-0201633610",
-            "stock": 3,
-            "year": 1994,
-            "genre": "Desarrollo de Software",
-            "price": 1050.00,
-            "image": "https://via.placeholder.com/300x450/065f46/ffffff?text=Design+Patterns"
-        },
-        {
-            "id": 9,
-            "title": "Neuromante",
-            "author": "William Gibson",
-            "isbn": "978-8445077065",
-            "stock": 0,
-            "year": 1984,
-            "genre": "Cyberpunk",
-            "price": 280.00,
-            "image": "https://via.placeholder.com/300x450/9d174d/ffffff?text=Neuromante"
-        },
-        {
-            "id": 10,
-            "title": "Grokking Algorithms",
-            "author": "Aditya Bhargava",
-            "isbn": "978-1617292231",
-            "stock": 18,
-            "year": 2016,
-            "genre": "Ciencias de la Computación",
-            "price": 750.00,
-            "image": "https://via.placeholder.com/300x450/047857/ffffff?text=Algorithms"
-        }
-    ]
 
-    if fmt == 'xml':
-        root = ET.Element('catalog')
-        for item in mock_books:
-            book_el = ET.SubElement(root, 'book')
-            for k, v in item.items():
-                child = ET.SubElement(book_el, str(k))
-                child.text = str(v) if v is not None else ""
-        
-        xml_data = ET.tostring(root, encoding='utf-8', method='xml')
-        return Response(xml_data, status=200, mimetype='application/xml')
-
-    return jsonify(mock_books), 200
-
-@app.route('/api/libros/<int:libro_id>', methods=['GET'])
-def get_book_by_id(libro_id):
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-    
+def pagina_solicitada():
+    """Normaliza ?page= y ?limit=."""
     try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            SELECT id, titulo, subtitulo, isbn, anio_publicacion, 
-                   descripcion, precio, stock, formato_id, categoria_id, 
-                   created_at, updated_at
-            FROM libros
-            WHERE id = %s
-        """, (libro_id,))
-        book = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if book is None:
-            return jsonify({"error": "Libro no encontrado"}), 404
-        
-        return jsonify(serialize_row(book)), 200
-    except psycopg2.Error as e:
-        return jsonify({"error": f"Error en la consulta: {str(e)}"}), 500
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        limit = int(request.args.get("limit", DEFAULT_LIMIT))
+    except (TypeError, ValueError):
+        limit = DEFAULT_LIMIT
+    return page, max(1, min(limit, MAX_LIMIT))
 
-@app.route('/api/libros/isbn/<isbn>', methods=['GET'])
-def get_book_by_isbn(isbn):
-    fmt = request.args.get('format', 'json').strip().lower()
 
-    libro = {
-        "id": 1,
-        "isbn": isbn,
-        "titulo": "Clean Code",
-        "precio": 450.00,
-        "stock": 10
-    }
+def url_absoluta(ruta):
+    """Convierte '/uploads/x.svg' en una URL completa usando el host actual."""
+    if not ruta:
+        return ""
+    if ruta.startswith("http://") or ruta.startswith("https://"):
+        return ruta
+    return request.host_url.rstrip("/") + "/" + ruta.lstrip("/")
 
-    if not libro:
-        if fmt == 'xml':
-            error_xml = "<error><mensaje>Libro no encontrado</mensaje></error>"
-            return Response(error_xml, status=404, mimetype='application/xml')
-        return jsonify({"error": "Libro no encontrado"}), 404
 
-    if fmt == 'xml':
-        xml_data = dict_to_xml('libro', libro)
-        return Response(xml_data, status=200, mimetype='application/xml')
+# ---------------------------------------------------------------------------
+# Proteccion de escrituras con JWT (verificacion LOCAL de la firma)
+#
+# No hay ninguna llamada HTTP al microservicio de login: este servicio
+# comprueba la firma con el secreto compartido y valida caducidad y tipo.
+# ---------------------------------------------------------------------------
+def token_de_peticion():
+    """Extrae el valor de 'Authorization: Bearer <token>'."""
+    cabecera = request.headers.get("Authorization", "")
+    if not cabecera:
+        return None
+    partes = cabecera.split(None, 1)
+    if len(partes) != 2 or partes[0].lower() != "bearer":
+        return None
+    return partes[1].strip() or None
+
+
+def respuesta_auth(status, mensaje, codigo="invalid_token"):
+    """Devuelve el error respetando ?format= y la cabecera WWW-Authenticate."""
+    respuesta = format_response({"error": mensaje, "error_code": codigo}, status)
+    if isinstance(respuesta, tuple):
+        cuerpo, codigo_http = respuesta
+        cuerpo.status_code = codigo_http
+        salida = cuerpo
     else:
-        return jsonify(libro), 200
+        salida = respuesta
+    salida.headers["WWW-Authenticate"] = (
+        f'Bearer realm="escritura_libros", error="{codigo}", error_description="{mensaje}"'
+    )
+    return salida
 
-@app.route('/api/libros/<identifier>/temas', methods=['GET'])
-def get_book_themes(identifier):
-    fmt = request.args.get('format', 'json').strip().lower()
 
-    conn = get_db_connection()
-    if not conn:
-        if fmt == 'xml':
-            return Response("<error><mensaje>Sin base de datos</mensaje></error>", status=500, mimetype='application/xml')
-        return jsonify({"error": "Sin base de datos"}), 500
+@app.before_request
+def exigir_jwt_en_escrituras():
+    """Protege POST/PUT/PATCH/DELETE. GET/HEAD/OPTIONS quedan publicos."""
+    if request.method not in PROTECTED_METHODS:
+        return None  # lecturas publicas (catalogo, imagenes, salud)
 
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    if not JWT_SECRET:
+        # Falla cerrado: sin secreto no se puede validar nada.
+        return respuesta_auth(
+            503,
+            "El servicio no tiene JWT_SECRET_KEY configurado; no se permiten escrituras.",
+            "server_error",
+        )
+
+    token = token_de_peticion()
+    if not token:
+        return respuesta_auth(
+            401,
+            "Falta la cabecera Authorization: Bearer <access_token>",
+            "missing_token",
+        )
 
     try:
-        query = """
-            SELECT 
-                l.id AS libro_id,
-                l.titulo,
-                l.isbn,
-                c.id AS concepto_id,
-                c.nombre AS tema_nombre,
-                c.descripcion AS tema_descripcion,
-                lc.definicion AS definicion_contextual
-            FROM libros l
-            LEFT JOIN libros_conceptos lc ON l.id = lc.libro_id
-            LEFT JOIN conceptos c ON lc.concepto_id = c.id
-            WHERE l.isbn = %s OR CAST(l.id AS TEXT) = %s
-            ORDER BY c.nombre ASC;
-        """
-        cur.execute(query, (identifier, identifier))
-        rows = cur.fetchall()
+        claims = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        return respuesta_auth(401, "El access_token ha expirado", "token_expired")
+    except jwt.InvalidTokenError as exc:
+        return respuesta_auth(401, f"Access_token invalido: {exc}", "invalid_token")
 
-        if not rows:
-            if fmt == 'xml':
-                return Response(
-                    "<error><mensaje>Libro no encontrado</mensaje></error>",
-                    status=404,
-                    mimetype='application/xml'
-                )
-            return jsonify({"error": "Libro no encontrado"}), 404
+    if claims.get("type") != "access":
+        return respuesta_auth(
+            401,
+            "Se requiere un access_token",
+            "wrong_token_type",
+        )
 
-        first_row = rows[0]
-        resultado = {
-            "id": first_row["libro_id"],
-            "titulo": first_row["titulo"],
-            "isbn": first_row["isbn"],
-            "temas": []
-        }
+    # Redis: verifica jwt:revoked:<jti> (fail-closed: sin Redis no se escribe)
+    revocado = redis_store.esta_revocado(claims.get("jti", ""))
+    if revocado is None:
+        return respuesta_auth(
+            503,
+            "Servicio de sesiones no disponible",
+            "server_error",
+        )
+    if revocado:
+        return respuesta_auth(401, "Token revocado", "revoked_token")
 
-        for row in rows:
-            if row["concepto_id"] is not None:
-                resultado["temas"].append({
-                    "id": row["concepto_id"],
-                    "nombre": row["tema_nombre"],
-                    "descripcion": row["tema_descripcion"] or "",
-                    "definicion_contextual": row["definicion_contextual"] or ""
-                })
+    if JWT_WRITE_ROLES and claims.get("rol") not in JWT_WRITE_ROLES:
+        return respuesta_auth(
+            403,
+            f"El rol '{claims.get('rol')}' no tiene permisos de escritura "
+            f"(se requiere {sorted(JWT_WRITE_ROLES)})",
+            "insufficient_scope",
+        )
 
-        if fmt == 'xml':
-            xml_output = book_themes_to_xml(resultado)
-            return Response(xml_output, status=200, mimetype='application/xml')
+    # Disponible para los handlers (auditoria de quien escribio).
+    g.jwt_claims = claims
+    return None
 
-        return jsonify(resultado), 200
 
-    except Exception as e:
-        if fmt == 'xml':
-            return Response(
-                f"<error><mensaje>{str(e)}</mensaje></error>",
-                status=500,
-                mimetype='application/xml'
+def quien_escribio():
+    """Identidad del autenticado para las respuestas de escritura."""
+    claims = getattr(g, "jwt_claims", None) or {}
+    return claims.get("email") or claims.get("sub") or "desconocido"
+
+
+# ---------------------------------------------------------------------------
+# Consultas al esquema real (ver apps/db/01_schema.sql)
+# ---------------------------------------------------------------------------
+SELECT_LIBROS = """
+    SELECT l.isbn,
+           l.titulo,
+           l.anio,
+           l.precio,
+           l.stock,
+           f.nombre_formato AS formato,
+           c.nombre_categoria AS categoria,
+           l.creado_en
+      FROM libros l
+      JOIN formatos   f ON f.id_formato   = l.id_formato
+      JOIN categorias c ON c.id_categoria = l.id_categoria
+"""
+
+
+def cargar_relaciones(conn, isbns):
+    """Carga autores, generos, imagenes y conceptos de varios libros en una vez.
+
+    Devuelve: {isbn: {"autores": [...], "generos": [...], "imagenes": [...],
+                      "conceptos": [...]}}
+    """
+    resultado = {
+        isbn: {"autores": [], "generos": [], "imagenes": [], "conceptos": []}
+        for isbn in isbns
+    }
+    if not isbns:
+        return resultado
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT la.isbn, a.nombre_autor
+              FROM libro_autor la
+              JOIN autores a ON a.id_autor = la.id_autor
+             WHERE la.isbn = ANY(%s)
+             ORDER BY a.nombre_autor
+            """,
+            (list(isbns),),
+        )
+        for fila in cur.fetchall():
+            resultado[fila["isbn"]]["autores"].append(fila["nombre_autor"])
+
+        cur.execute(
+            """
+            SELECT lg.isbn, g.nombre_genero
+              FROM libro_genero lg
+              JOIN generos g ON g.id_genero = lg.id_genero
+             WHERE lg.isbn = ANY(%s)
+             ORDER BY g.nombre_genero
+            """,
+            (list(isbns),),
+        )
+        for fila in cur.fetchall():
+            resultado[fila["isbn"]]["generos"].append(fila["nombre_genero"])
+
+        cur.execute(
+            """
+            SELECT isbn, file_path, es_portada, texto_alternativo
+              FROM libro_imagenes
+             WHERE isbn = ANY(%s)
+             ORDER BY es_portada DESC, id_imagen
+            """,
+            (list(isbns),),
+        )
+        for fila in cur.fetchall():
+            resultado[fila["isbn"]]["imagenes"].append(
+                {
+                    "ruta": fila["file_path"],
+                    "url": url_absoluta(fila["file_path"]),
+                    "es_portada": bool(fila["es_portada"]),
+                    "texto_alternativo": fila["texto_alternativo"] or "",
+                }
             )
-        return jsonify({"error": "Error interno del servidor", "detalle": str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
 
-@app.route('/api/libros/buscar', methods=['GET'])
-def search_books():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-    
+        cur.execute(
+            """
+            SELECT lc.isbn, co.termino, lc.definicion_en_libro
+              FROM libro_concepto lc
+              JOIN conceptos co ON co.id_concepto = lc.id_concepto
+             WHERE lc.isbn = ANY(%s)
+             ORDER BY co.termino
+            """,
+            (list(isbns),),
+        )
+        for fila in cur.fetchall():
+            resultado[fila["isbn"]]["conceptos"].append(
+                {"termino": fila["termino"], "definicion": fila["definicion_en_libro"]}
+            )
+    return resultado
+
+
+def xml_imagenes(parent, imagenes):
+    """Anade <images><image url=".." isCover=".." order=".."/></images>."""
+    contenedor = ET.SubElement(parent, "images")
+    for orden, imagen in enumerate(imagenes, start=1):
+        ET.SubElement(
+            contenedor,
+            "image",
+            {
+                "url": imagen["url"],
+                "path": imagen["ruta"],
+                "isCover": "true" if imagen["es_portada"] else "false",
+                "order": str(orden),
+                "altText": imagen["texto_alternativo"],
+            },
+        )
+    return contenedor
+
+
+def xml_textos(parent, tag, item_tag, valores):
+    contenedor = ET.SubElement(parent, tag)
+    for valor in valores:
+        ET.SubElement(contenedor, item_tag).text = str(valor)
+    return contenedor
+
+
+def libro_a_xml(book, rel, incluir_conceptos=True, incluir_datos_minimos=False):
+    """Construye el elemento <book> del XML del catalogo."""
+    elemento = ET.Element("book", {"isbn": str(book["isbn"])})
+    ET.SubElement(elemento, "title").text = str(book["titulo"] or "")
+    xml_textos(elemento, "authors", "author", rel["autores"])
+    ET.SubElement(elemento, "publicationYear").text = str(book["anio"])
+    ET.SubElement(
+        elemento, "price", {"currency": CURRENCY}
+    ).text = f"{book['precio']:.2f}"
+    if not incluir_datos_minimos:
+        ET.SubElement(elemento, "stock").text = str(book["stock"])
+        xml_textos(elemento, "genres", "genre", rel["generos"])
+        ET.SubElement(elemento, "format").text = str(book["formato"] or "")
+        ET.SubElement(elemento, "category").text = str(book["categoria"] or "")
+    xml_imagenes(elemento, rel["imagenes"])
+    if incluir_conceptos and rel["conceptos"]:
+        contenedor = ET.SubElement(elemento, "concepts")
+        for concepto in rel["conceptos"]:
+            ET.SubElement(
+                contenedor,
+                "concept",
+                {"name": concepto["termino"], "definition": concepto["definicion"]},
+            )
+    return elemento
+
+
+def libro_a_json(book, rel, minimo=False):
+    """Version JSON del catalogo (mismos datos que el XML, sin formato)."""
+    datos = {
+        "isbn": book["isbn"],
+        "titulo": book["titulo"],
+        "autores": rel["autores"],
+        "anio": book["anio"],
+        "precio": serialize(book["precio"]),
+        "imagenes": rel["imagenes"],
+        "portada": next((i["url"] for i in rel["imagenes"] if i["es_portada"]), None),
+    }
+    if not minimo:
+        datos.update(
+            {
+                "stock": book["stock"],
+                "formato": book["formato"],
+                "categoria": book["categoria"],
+                "generos": rel["generos"],
+                "conceptos": rel["conceptos"],
+            }
+        )
+    return datos
+
+
+# ---------------------------------------------------------------------------
+# Endpoints de lectura
+# ---------------------------------------------------------------------------
+@app.route("/books", methods=["GET"])
+@app.route("/api/books", methods=["GET"])   # alias del enunciado
+@app.route("/api/libros", methods=["GET"])
+def listar_libros():
+    """
+    Lista el catalogo de libros paginado (XML por defecto)
+    ---
+    parameters:
+      - name: format
+        in: query
+        type: string
+        enum: [xml, json]
+        default: xml
+      - name: page
+        in: query
+        type: integer
+        default: 1
+      - name: limit
+        in: query
+        type: integer
+        default: 8
+    responses:
+      200:
+        description: Catalogo de libros
+      500:
+        description: Error de conexion o consulta
+    """
+    page, limit = pagina_solicitada()
+    page, limit = pagina_solicitada()
+    fmt = request.args.get("format", "xml").lower()
+    # Cache Redis (fail-open): books:list:<hash> TTL 60 s
+    cache_key = redis_store.clave_lista({"page": page, "limit": limit, "format": fmt})
+    cached = redis_store.leer_cache(cache_key)
+    if cached is not None:
+        resp = jsonify(cached), 200
+        resp[0].headers["X-Cache"] = "HIT"
+        return resp
     try:
-        query = """
-            SELECT id, titulo, subtitulo, isbn, anio_publicacion, 
-                   descripcion, precio, stock, formato_id, categoria_id, 
-                   created_at, updated_at
-            FROM libros
-            WHERE 1=1
-        """
-        params = []
-        
-        titulo = request.args.get('titulo')
-        if titulo:
-            query += " AND titulo ILIKE %s"
-            params.append(f"%{titulo}%")
-        
-        categoria_id = request.args.get('categoria_id')
-        if categoria_id:
-            query += " AND categoria_id = %s"
-            params.append(categoria_id)
-        
-        formato_id = request.args.get('formato_id')
-        if formato_id:
-            query += " AND formato_id = %s"
-            params.append(formato_id)
-        
-        anio_publicacion = request.args.get('anio_publicacion')
-        if anio_publicacion:
-            query += " AND anio_publicacion = %s"
-            params.append(anio_publicacion)
-        
-        query += " ORDER BY id"
-        
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute(query, params)
-        books = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
-        return jsonify(serialize_rows(books)), 200
-    except psycopg2.Error as e:
-        return jsonify({"error": f"Error en la búsqueda: {str(e)}"}), 500
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) AS total FROM libros")
+                total = cur.fetchone()["total"]
+                cur.execute(
+                    SELECT_LIBROS + " ORDER BY l.titulo LIMIT %s OFFSET %s",
+                    (limit, (page - 1) * limit),
+                )
+                libros = cur.fetchall()
+                rel = cargar_relaciones(conn, [b["isbn"] for b in libros])
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error al consultar el catalogo: {exc}"}, 500)
 
-@app.route('/api/libros', methods=['POST'])
-def create_book():
-    if not request.json:
-        return jsonify({"error": "Se requiere JSON en el cuerpo de la solicitud"}), 400
-    
-    data = request.json
-    
-    if not data.get('titulo') or not data.get('formato_id') or not data.get('categoria_id'):
-        return jsonify({"error": "Campos requeridos: titulo, formato_id, categoria_id"}), 400
-    
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-    
+    if request.args.get("format", "xml").lower() == "json":
+        cuerpo = {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "libros": [libro_a_json(b, rel[b["isbn"]]) for b in libros],
+        }
+        redis_store.guardar_cache(cache_key, cuerpo, CACHE_LIST_TTL)
+        resp = jsonify(cuerpo), 200
+        resp[0].headers["X-Cache"] = "MISS"
+        return resp
+
+    raiz = ET.Element("library", {"total": str(total), "page": str(page), "limit": str(limit)})
+    for book in libros:
+        raiz.append(libro_a_xml(book, rel[book["isbn"]]))
+    return format_response(None, 200, xml_str=ET.tostring(raiz, encoding="unicode"))
+
+
+@app.route("/api/libros/minimo", methods=["GET"])
+def listar_libros_minimo():
+    """
+    Datos minimos de los libros junto con sus imagenes
+    ---
+    Devuelve por libro: isbn, titulo, autores, anio, precio, stock,
+    portada e imagenes. Pensado para el catalogo de la app Electron.
+    parameters:
+      - name: format
+        in: query
+        type: string
+        enum: [xml, json]
+        default: xml
+      - name: page
+        in: query
+        type: integer
+        default: 1
+      - name: limit
+        in: query
+        type: integer
+        default: 8
+    responses:
+      200:
+        description: Catalogo minimo con imagenes
+      500:
+        description: Error de conexion o consulta
+    """
+    page, limit = pagina_solicitada()
     try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            INSERT INTO libros (titulo, subtitulo, isbn, anio_publicacion, descripcion, 
-                              precio, stock, formato_id, categoria_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id, titulo, isbn, anio_publicacion, precio, stock, 
-                      formato_id, categoria_id, created_at
-        """, (
-            data.get('titulo'),
-            data.get('subtitulo'),
-            data.get('isbn'),
-            data.get('anio_publicacion'),
-            data.get('descripcion'),
-            data.get('precio', 0),
-            data.get('stock', 0),
-            data.get('formato_id'),
-            data.get('categoria_id')
-        ))
-        
-        new_book = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return jsonify(serialize_row(new_book)), 201
-    except psycopg2.Error as e:
-        conn.rollback()
-        conn.close()
-        return jsonify({"error": f"Error al crear el libro: {str(e)}"}), 500
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) AS total FROM libros")
+                total = cur.fetchone()["total"]
+                cur.execute(
+                    SELECT_LIBROS + " ORDER BY l.titulo LIMIT %s OFFSET %s",
+                    (limit, (page - 1) * limit),
+                )
+                libros = cur.fetchall()
+                rel = cargar_relaciones(conn, [b["isbn"] for b in libros])
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error al consultar el catalogo: {exc}"}, 500)
 
-@app.route('/api/libros/<int:libro_id>', methods=['PUT'])
-def update_book(libro_id):
-    if not request.json:
-        return jsonify({"error": "Se requiere JSON en el cuerpo de la solicitud"}), 400
-    
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-    
+    if request.args.get("format", "xml").lower() == "json":
+        return (
+            jsonify(
+                {
+                    "total": total,
+                    "page": page,
+                    "limit": limit,
+                    "libros": [libro_a_json(b, rel[b["isbn"]], minimo=True) for b in libros],
+                }
+            ),
+            200,
+        )
+
+    raiz = ET.Element("library", {"total": str(total), "page": str(page), "limit": str(limit)})
+    for book in libros:
+        raiz.append(libro_a_xml(book, rel[book["isbn"]], incluir_conceptos=False,
+                                 incluir_datos_minimos=False))
+    return format_response(None, 200, xml_str=ET.tostring(raiz, encoding="unicode"))
+
+
+def _obtener_libro(conn, isbn):
+    with conn.cursor() as cur:
+        cur.execute(SELECT_LIBROS + " WHERE l.isbn = %s", (isbn,))
+        return cur.fetchone()
+
+
+@app.route("/api/libros/isbn/<isbn>", methods=["GET"])
+@app.route("/api/libros/<isbn>", methods=["GET"])
+@app.route("/api/books/<isbn>", methods=["GET"])   # alias del enunciado
+@app.route("/books/<isbn>", methods=["GET"])        # alias del enunciado
+def obtener_libro(isbn):
+    """
+    Obtiene un libro por ISBN con autores, generos, imagenes y conceptos
+    ---
+    parameters:
+      - name: isbn
+        in: path
+        type: string
+        required: true
+        example: 978-000-000-01-0
+      - name: format
+        in: query
+        type: string
+        enum: [xml, json]
+        default: xml
+    responses:
+      200:
+        description: Libro encontrado
+      404:
+        description: Libro no encontrado
+    """
+    # Cache Redis (fail-open): books:<isbn> solo para JSON
+    if request.args.get("format", "xml").lower() == "json":
+        hit = redis_store.leer_cache(f"books:{isbn}")
+        if hit is not None:
+            resp = jsonify(hit), 200
+            resp[0].headers["X-Cache"] = "HIT"
+            return resp
     try:
-        data = request.json
-        
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM libros WHERE id = %s", (libro_id,))
-        if cursor.fetchone() is None:
-            conn.close()
-            return jsonify({"error": "Libro no encontrado"}), 404
-        
-        updates = []
-        params = []
-        
-        for field in ['titulo', 'subtitulo', 'isbn', 'anio_publicacion', 'descripcion', 
-                      'precio', 'stock', 'formato_id', 'categoria_id']:
-            if field in data:
-                updates.append(f"{field} = %s")
-                params.append(data[field])
-        
-        if not updates:
-            conn.close()
-            return jsonify({"error": "No hay campos para actualizar"}), 400
-        
-        params.append(libro_id)
-        
-        query = f"UPDATE libros SET {', '.join(updates)} WHERE id = %s RETURNING *"
-        cursor.execute(query, params)
-        conn.commit()
-        
-        cursor_dict = conn.cursor(cursor_factory=RealDictCursor)
-        cursor_dict.execute("""
-            SELECT id, titulo, subtitulo, isbn, anio_publicacion, descripcion, 
-                   precio, stock, formato_id, categoria_id, created_at, updated_at
-            FROM libros WHERE id = %s
-        """, (libro_id,))
-        result = cursor_dict.fetchone()
-        
-        cursor.close()
-        cursor_dict.close()
-        conn.close()
-        
-        return jsonify(serialize_row(result)), 200
-    except psycopg2.Error as e:
-        conn.rollback()
-        conn.close()
-        return jsonify({"error": f"Error al actualizar el libro: {str(e)}"}), 500
+        with get_db_connection() as conn:
+            book = _obtener_libro(conn, isbn)
+            if book is None:
+                return format_response({"error": "Libro no encontrado", "isbn": isbn}, 404)
+            rel = cargar_relaciones(conn, [isbn])[isbn]
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error al consultar el libro: {exc}"}, 500)
 
-@app.route('/api/libros/<int:libro_id>', methods=['DELETE'])
-def delete_book(libro_id):
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-    
+    if request.args.get("format", "xml").lower() == "json":
+        cuerpo = libro_a_json(book, rel)
+        redis_store.guardar_cache(f"books:{isbn}", cuerpo, CACHE_ITEM_TTL)
+        resp = jsonify(cuerpo), 200
+        resp[0].headers["X-Cache"] = "MISS"
+        return resp
+    return format_response(
+        None, 200, xml_str=ET.tostring(libro_a_xml(book, rel), encoding="unicode")
+    )
+
+
+@app.route("/api/libros/<isbn>/temas", methods=["GET"])
+def obtener_temas(isbn):
+    """
+    Lista los conceptos definidos para un libro
+    ---
+    parameters:
+      - name: isbn
+        in: path
+        type: string
+        required: true
+      - name: format
+        in: query
+        type: string
+        enum: [xml, json]
+        default: xml
+    responses:
+      200:
+        description: Conceptos del libro
+      404:
+        description: Libro no encontrado
+    """
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM libros WHERE id = %s", (libro_id,))
-        if cursor.fetchone() is None:
-            conn.close()
-            return jsonify({"error": "Libro no encontrado"}), 404
-        
-        cursor.execute("DELETE FROM libros WHERE id = %s", (libro_id,))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return '', 204
-    except psycopg2.Error as e:
-        conn.rollback()
-        conn.close()
-        return jsonify({"error": f"Error al eliminar el libro: {str(e)}"}), 500
+        with get_db_connection() as conn:
+            book = _obtener_libro(conn, isbn)
+            if book is None:
+                return format_response({"error": "Libro no encontrado", "isbn": isbn}, 404)
+            rel = cargar_relaciones(conn, [isbn])[isbn]
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error al consultar los temas: {exc}"}, 500)
 
-# ============================================================================
-# ENDPOINT DE PRUEBA Y SALUD
-# ============================================================================
+    if request.args.get("format", "xml").lower() == "json":
+        return jsonify({"isbn": isbn, "titulo": book["titulo"], "conceptos": rel["conceptos"]}), 200
+    raiz = ET.Element("temas", {"isbn": str(isbn)})
+    ET.SubElement(raiz, "titulo").text = str(book["titulo"] or "")
+    for concepto in rel["conceptos"]:
+        ET.SubElement(raiz, "tema", {"name": concepto["termino"], "definition": concepto["definicion"]})
+    return format_response(None, 200, root="temas", xml_str=ET.tostring(raiz, encoding="unicode"))
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    return jsonify({
-        "status": "ok",
-        "message": "Library Books API is running"
-    }), 200
 
-@app.route('/api/db-health', methods=['GET'])
-def db_health_check():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({
-            "status": "error",
-            "message": "Database connection failed"
-        }), 500
-    
+@app.route("/api/libros/buscar", methods=["GET"])
+def buscar_libros():
+    """
+    Busca libros por atributos del catalogo
+    ---
+    parameters:
+      - name: titulo
+        in: query
+        type: string
+        description: Coincidencia parcial, no distingue mayusculas
+      - name: categoria
+        in: query
+        type: string
+        description: Nombre exacto de la categoria
+      - name: formato
+        in: query
+        type: string
+        description: Nombre exacto del formato
+      - name: anio
+        in: query
+        type: integer
+        description: Anio de publicacion exacto
+      - name: format
+        in: query
+        type: string
+        enum: [xml, json]
+        default: json
+    responses:
+      200:
+        description: Libros que coinciden con el filtro
+    """
+    filtros, params = [], []
+    if request.args.get("titulo"):
+        filtros.append("l.titulo ILIKE %s")
+        params.append(f"%{request.args['titulo']}%")
+    if request.args.get("categoria"):
+        filtros.append("c.nombre_categoria ILIKE %s")
+        params.append(request.args["categoria"])
+    if request.args.get("formato"):
+        filtros.append("f.nombre_formato ILIKE %s")
+        params.append(request.args["formato"])
+    if request.args.get("anio"):
+        filtros.append("l.anio = %s")
+        params.append(request.args["anio"])
+    if request.args.get("stock"):
+        filtros.append("l.stock = %s")
+        params.append(request.args["stock"])
+
+    where = (" WHERE " + " AND ".join(filtros)) if filtros else ""
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "status": "ok",
-            "message": "Database connection successful"
-        }), 200
-    except psycopg2.Error as e:
-        return jsonify({
-            "status": "error",
-            "message": f"Database error: {str(e)}"
-        }), 500
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(SELECT_LIBROS + where + " ORDER BY l.titulo", params)
+                libros = cur.fetchall()
+                rel = cargar_relaciones(conn, [b["isbn"] for b in libros])
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error en la busqueda: {exc}"}, 500)
 
-# ============================================================================
-# MANEJO DE ERRORES GLOBAL
-# ============================================================================
+    if request.args.get("format", "xml").lower() == "xml":
+        raiz = ET.Element("library", {"total": str(len(libros))})
+        for book in libros:
+            raiz.append(libro_a_xml(book, rel[book["isbn"]], incluir_conceptos=False))
+        return format_response(None, 200, xml_str=ET.tostring(raiz, encoding="unicode"))
+    return jsonify([libro_a_json(b, rel[b["isbn"]], minimo=True) for b in libros]), 200
+
+
+# ---------------------------------------------------------------------------
+# Endpoints de escritura
+# ---------------------------------------------------------------------------
+def _resolver_id(cur, tabla, columna_nombre, columna_id, valor):
+    """Acepta un id numerico o el nombre del catalogo y devuelve el id."""
+    if valor is None:
+        return None
+    if isinstance(valor, int) or str(valor).isdigit():
+        return int(valor)
+    # 'cur' ya es un cursor (Psycopg 3 no expone .cursor() sobre un cursor):
+    # se ejecuta directamente sobre el mismo cursor.
+    cur.execute(
+        f"SELECT {columna_id} FROM {tabla} WHERE {columna_nombre} ILIKE %s",
+        (str(valor).strip(),),
+    )
+    fila = cur.fetchone()
+    if fila is None:
+        cur.execute(
+            f"INSERT INTO {tabla} ({columna_nombre}) VALUES (%s) RETURNING {columna_id}",
+            (str(valor).strip(),),
+        )
+        return cur.fetchone()[columna_id]
+    return fila[columna_id]
+
+
+def _asignar_autores(cur, isbn, valores):
+    for valor in valores or []:
+        if isinstance(valor, int) or str(valor).isdigit():
+            cur.execute(
+                "INSERT INTO libro_autor (isbn, id_autor) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (isbn, int(valor)),
+            )
+            continue
+        cur.execute("SELECT id_autor FROM autores WHERE nombre_autor ILIKE %s", (str(valor).strip(),))
+        fila = cur.fetchone()
+        if fila is None:
+            cur.execute("INSERT INTO autores (nombre_autor) VALUES (%s) RETURNING id_autor",
+                        (str(valor).strip(),))
+            id_autor = cur.fetchone()["id_autor"]
+        else:
+            id_autor = fila["id_autor"]
+        cur.execute(
+            "INSERT INTO libro_autor (isbn, id_autor) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+            (isbn, id_autor),
+        )
+
+
+def _asignar_generos(cur, isbn, valores):
+    for valor in valores or []:
+        id_genero = _resolver_id(cur, "generos", "nombre_genero", "id_genero", valor)
+        cur.execute(
+            "INSERT INTO libro_genero (isbn, id_genero) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+            (isbn, id_genero),
+        )
+
+
+def _asignar_conceptos(cur, isbn, valores):
+    for concepto in valores or []:
+        if isinstance(concepto, str):
+            termino, definicion = concepto, ""
+        else:
+            termino = concepto.get("termino") or concepto.get("nombre") or ""
+            definicion = concepto.get("definicion") or concepto.get("definicion_en_libro") or ""
+        if not termino:
+            continue
+        id_concepto = _resolver_id(cur, "conceptos", "termino", "id_concepto", termino)
+        cur.execute(
+            """
+            INSERT INTO libro_concepto (isbn, id_concepto, definicion_en_libro)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (isbn, id_concepto) DO UPDATE SET definicion_en_libro = EXCLUDED.definicion_en_libro
+            """,
+            (isbn, id_concepto, definicion),
+        )
+
+
+def _asignar_imagenes(cur, isbn, valores):
+    for posicion, imagen in enumerate(valores or []):
+        if isinstance(imagen, str):
+            ruta, es_portada, alt = imagen, posicion == 0, ""
+        else:
+            ruta = imagen.get("ruta") or imagen.get("file_path") or imagen.get("url") or ""
+            es_portada = bool(imagen.get("es_portada", posicion == 0))
+            alt = imagen.get("texto_alternativo") or imagen.get("altText") or ""
+        if not ruta:
+            continue
+        if ruta.startswith("http"):
+            ruta = "/" + ruta.split("/", 3)[3] if ruta.count("/") > 2 else ruta
+        cur.execute(
+            "UPDATE libro_imagenes SET es_portada = FALSE WHERE isbn = %s AND es_portada = TRUE",
+            (isbn,),
+        )
+        cur.execute(
+            """
+            INSERT INTO libro_imagenes (isbn, file_path, es_portada, texto_alternativo)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (isbn, ruta, es_portada, alt),
+        )
+
+
+@app.route("/api/libros", methods=["POST"])
+@app.route("/api/books", methods=["POST"])   # alias del enunciado (requiere Bearer)
+def crear_libro():
+    """
+    Crea un libro en el catalogo
+    ---
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required: [isbn, titulo, anio, precio, stock, formato, categoria]
+          properties:
+            isbn: {type: string, example: "978-000-000-99-0"}
+            titulo: {type: string, example: Clean Code}
+            anio: {type: integer, example: 2008}
+            precio: {type: number, example: 450.00}
+            stock: {type: integer, example: 12}
+            formato: {type: string, example: Tapa Blanda}
+            categoria: {type: string, example: Novela}
+            autores: {type: array, items: {type: string}}
+            generos: {type: array, items: {type: string}}
+            conceptos:
+              type: array
+              items:
+                type: object
+                properties:
+                  termino: {type: string}
+                  definicion: {type: string}
+            imagenes:
+              type: array
+              items:
+                type: object
+                properties:
+                  ruta: {type: string, example: "/uploads/img_1.svg"}
+                  es_portada: {type: boolean}
+                  texto_alternativo: {type: string}
+    responses:
+      201:
+        description: Libro creado
+      400:
+        description: Faltan campos obligatorios
+      409:
+        description: El ISBN ya existe
+    """
+    data = request.get_json(silent=True) or {}
+    requeridos = ["isbn", "titulo", "anio", "precio", "stock", "formato", "categoria"]
+    faltantes = [c for c in requeridos if data.get(c) in (None, "")]
+    if faltantes:
+        return format_response({"error": "Faltan campos requeridos", "campos": faltantes}, 400)
+
+    isbn = str(data["isbn"]).strip()
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM libros WHERE isbn = %s", (isbn,))
+                if cur.fetchone() is not None:
+                    return format_response({"error": "El ISBN ya existe", "isbn": isbn}, 409)
+                id_formato = _resolver_id(cur, "formatos", "nombre_formato", "id_formato", data["formato"])
+                id_categoria = _resolver_id(cur, "categorias", "nombre_categoria", "id_categoria",
+                                            data["categoria"])
+                cur.execute(
+                    """
+                    INSERT INTO libros (isbn, titulo, anio, precio, stock, id_formato, id_categoria)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (isbn, str(data["titulo"]).strip(), int(data["anio"]),
+                     float(data["precio"]), int(data["stock"]), id_formato, id_categoria),
+                )
+                _asignar_autores(cur, isbn, data.get("autores"))
+                _asignar_generos(cur, isbn, data.get("generos"))
+                _asignar_conceptos(cur, isbn, data.get("conceptos"))
+                _asignar_imagenes(cur, isbn, data.get("imagenes"))
+            book = _obtener_libro(conn, isbn)
+            rel = cargar_relaciones(conn, [isbn])[isbn]
+    except psycopg.errors.UniqueViolation:
+        return format_response({"error": "El ISBN ya existe", "isbn": isbn}, 409)
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error al crear el libro: {exc}"}, 500)
+
+    redis_store.invalidar_catalogo(isbn)
+    return format_response(libro_a_json(book, rel), 201, root="book")
+
+
+def _actualizar_libro(isbn, parcial):
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return format_response({"error": "No hay campos para actualizar"}, 400)
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM libros WHERE isbn = %s", (isbn,))
+                if cur.fetchone() is None:
+                    return format_response({"error": "Libro no encontrado", "isbn": isbn}, 404)
+
+                asignaciones, params = [], []
+
+                def agregar(campo_sql, columna, conversor=str):
+                    if columna in data and data[columna] is not None:
+                        asignaciones.append(f"{campo_sql} = %s")
+                        params.append(conversor(data[columna]))
+
+                agregar("titulo", "titulo")
+                agregar("anio", "anio", int)
+                agregar("precio", "precio", float)
+                agregar("stock", "stock", int)
+                if data.get("formato") is not None:
+                    asignaciones.append("id_formato = %s")
+                    params.append(_resolver_id(cur, "formatos", "nombre_formato", "id_formato",
+                                               data["formato"]))
+                if data.get("categoria") is not None:
+                    asignaciones.append("id_categoria = %s")
+                    params.append(_resolver_id(cur, "categorias", "nombre_categoria", "id_categoria",
+                                               data["categoria"]))
+                if asignaciones:
+                    params.append(isbn)
+                    cur.execute(
+                        f"UPDATE libros SET {', '.join(asignaciones)} WHERE isbn = %s", params
+                    )
+
+                if "autores" in data:
+                    cur.execute("DELETE FROM libro_autor WHERE isbn = %s", (isbn,))
+                    _asignar_autores(cur, isbn, data["autores"])
+                if "generos" in data:
+                    cur.execute("DELETE FROM libro_genero WHERE isbn = %s", (isbn,))
+                    _asignar_generos(cur, isbn, data["generos"])
+                if "conceptos" in data:
+                    cur.execute("DELETE FROM libro_concepto WHERE isbn = %s", (isbn,))
+                    _asignar_conceptos(cur, isbn, data["conceptos"])
+                if "imagenes" in data:
+                    cur.execute("DELETE FROM libro_imagenes WHERE isbn = %s", (isbn,))
+                    _asignar_imagenes(cur, isbn, data["imagenes"])
+
+            book = _obtener_libro(conn, isbn)
+            rel = cargar_relaciones(conn, [isbn])[isbn]
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error al actualizar el libro: {exc}"}, 500)
+    redis_store.invalidar_catalogo(isbn)
+    return format_response(libro_a_json(book, rel), 200, root="book")
+
+
+@app.route("/api/libros/<isbn>", methods=["PUT"])
+@app.route("/api/books/<isbn>", methods=["PUT"])   # alias del enunciado
+def reemplazar_libro(isbn):
+    """
+    Reemplaza los campos enviados de un libro
+    ---
+    parameters:
+      - name: isbn
+        in: path
+        type: string
+        required: true
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            titulo: {type: string}
+            anio: {type: integer}
+            precio: {type: number}
+            stock: {type: integer}
+            formato: {type: string}
+            categoria: {type: string}
+            autores: {type: array, items: {type: string}}
+            generos: {type: array, items: {type: string}}
+            conceptos: {type: array, items: {type: object}}
+            imagenes: {type: array, items: {type: object}}
+    responses:
+      200:
+        description: Libro actualizado
+      400:
+        description: No hay campos para actualizar
+      404:
+        description: Libro no encontrado
+    """
+    return _actualizar_libro(isbn, parcial=False)
+
+
+@app.route("/api/libros/<isbn>", methods=["PATCH"])
+@app.route("/api/books/<isbn>", methods=["PATCH"])  # alias del enunciado
+def parchear_libro(isbn):
+    """
+    Actualiza de forma parcial un libro (solo los campos enviados)
+    ---
+    parameters:
+      - name: isbn
+        in: path
+        type: string
+        required: true
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            stock: {type: integer, example: 25}
+    responses:
+      200:
+        description: Libro actualizado
+      404:
+        description: Libro no encontrado
+    """
+    return _actualizar_libro(isbn, parcial=True)
+
+
+@app.route("/api/libros/<isbn>", methods=["DELETE"])
+@app.route("/api/books/<isbn>", methods=["DELETE"])  # alias del enunciado
+def eliminar_libro(isbn):
+    """
+    Elimina un libro del catalogo
+    ---
+    parameters:
+      - name: isbn
+        in: path
+        type: string
+        required: true
+    responses:
+      204:
+        description: Libro eliminado
+      404:
+        description: Libro no encontrado
+    """
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM libros WHERE isbn = %s RETURNING isbn", (isbn,))
+                if cur.fetchone() is None:
+                    return format_response({"error": "Libro no encontrado", "isbn": isbn}, 404)
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"error": f"Error al eliminar el libro: {exc}"}, 500)
+    redis_store.invalidar_catalogo(isbn)
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Imagenes, salud y arranque
+# ---------------------------------------------------------------------------
+@app.route("/uploads/<path:archivo>", methods=["GET"])
+def servir_imagen(archivo):
+    """Sirve las imagenes del catalogo (portadas de libro)."""
+    return send_from_directory(UPLOADS_DIR, archivo)
+
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    """
+    Estado del microservicio
+    ---
+    responses:
+      200:
+        description: Servicio activo
+    """
+    return format_response(
+        {"status": "ok", "service": "books", "version": "2.0.0", "uploads": str(UPLOADS_DIR),
+         "redis": redis_store.redis_health(),
+         "cache_ttls": {"lista": CACHE_LIST_TTL, "item": CACHE_ITEM_TTL}}, 200
+    )
+
+
+@app.route("/api/db-health", methods=["GET"])
+def db_health():
+    """
+    Estado del microservicio y su conexion con PostgreSQL
+    ---
+    responses:
+      200:
+        description: Base de datos accesible
+      500:
+        description: Base de datos no accesible
+    """
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) AS total FROM libros")
+                total = cur.fetchone()["total"]
+        return format_response({"status": "ok", "database": "connected", "libros": total}, 200)
+    except Exception as exc:  # noqa: BLE001
+        return format_response({"status": "error", "database": "disconnected", "message": str(exc)}, 500)
+
 
 @app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Endpoint no encontrado"}), 404
+def no_encontrado(error):
+    return format_response({"error": "Endpoint no encontrado", "path": request.path}, 404)
+
 
 @app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"error": "Error interno del servidor"}), 500
+def error_servidor(error):
+    return format_response({"error": "Error interno del servidor"}, 500)
 
-# ============================================================================
-# PUNTO DE ENTRADA
-# ============================================================================
 
-if __name__ == '__main__':
-    # Puerto ajustado a 5001 por defecto como se solicitó
-    port = int(os.getenv('FLASK_PORT', 5001))
-    debug = os.getenv('FLASK_DEBUG', 'False') == 'True'
-    
-    print(f"""
-    ╔════════════════════════════════════════════════════════════╗
-    ║  Library Books Microservice - Flask API                   ║
-    ║  Version: 1.0.1 (XML Refactored)                          ║
-    ║  Database: PostgreSQL                                     ║
-    ║  CORS: Enabled                                            ║
-    ║  Swagger: http://localhost:{port}/apidocs                  ║
-    ╚════════════════════════════════════════════════════════════╝
-    """)
-    
-    app.run(host='0.0.0.0', port=port, debug=debug)
+if __name__ == "__main__":
+    port = int(os.getenv("FLASK_PORT", "5001"))
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    print(f"Microservicio de libros en http://0.0.0.0:{port}  (Swagger: /apidocs/)")
+    print(f"Imagenes servidas desde: {UPLOADS_DIR}")
+    app.run(host="0.0.0.0", port=port, debug=debug)

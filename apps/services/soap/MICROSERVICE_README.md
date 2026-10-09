@@ -1,465 +1,185 @@
-# Library Books Microservice - Flask API
+# Microservicio de libros - Flask + Psycopg 3 + PostgreSQL
 
-Microservicio REST construido con Flask para gestionar operaciones CRUD de libros en una librería en línea. Conectado directamente a PostgreSQL con soporte CORS y documentación automática con Swagger.
+CRUD del catalogo de libros con CORS habilitado, salida **XML (por defecto)** o
+**JSON** segun `?format=`, paginacion por peticion, Swagger en `/apidocs/` y
+servicio de imagenes en `/uploads/`.
 
-## Características
-
-- ✅ **CRUD Completo**: Crear, leer, actualizar y eliminar libros
-- ✅ **Búsqueda Avanzada**: Por ISBN, título, categoría, formato, año de publicación
-- ✅ **CORS Habilitado**: Acceso desde cualquier dominio
-- ✅ **Swagger/OpenAPI**: Documentación interactiva en `/apidocs`
-- ✅ **Variables de Entorno**: Credenciales seguras en archivo `.env`
-- ✅ **Manejo de Errores**: Respuestas JSON consistentes
-- ✅ **Health Checks**: Endpoints de verificación de estado
+El XML que produce sigue el diseno de `library.xml` (raiz `library`, `<book isbn="...">`).
 
 ## Requisitos
 
-- Python 3.8 o superior
+- Python 3.10 o superior
 - PostgreSQL 12 o superior
-- pip (gestor de paquetes de Python)
+- `uv` o `pip`
 
-## Instalación
+## 1. Base de datos
 
-### 1. Instalar dependencias
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configurar variables de entorno
-
-El archivo `.env` ya está configurado con:
-
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=library
-DB_USER=library_user
-DB_PASSWORD=library666
-FLASK_ENV=development
-FLASK_DEBUG=True
-```
-
-Modifica estos valores según tu configuración de PostgreSQL.
-
-### 3. Asegurar que la base de datos esté creada
+Desde la raiz del proyecto:
 
 ```bash
-psql -h localhost -U library_user -d library -f ../../data/library_schema.sql
+psql -U postgres -f apps/db/00_create_database.sql
+psql -U library_user -d library -f apps/db/01_schema.sql
+psql -U library_user -d library -f apps/db/02_seed_30_per_table.sql
 ```
 
-## Ejecución
-
-### Modo desarrollo
+Si la base ya existia con el esquema anterior, aplica solo la migracion:
 
 ```bash
-python app.py
+psql -U library_user -d library -f apps/db/03_migracion_verificado.sql
 ```
 
-Esto iniciará el servidor en `http://localhost:5000`
-
-### Modo producción
+## 2. Configuracion
 
 ```bash
-gunicorn --workers 4 --bind 0.0.0.0:5000 app:app
+cp .env.example .env
 ```
 
-## Documentación Swagger
+| Variable | Por defecto | Descripcion |
+| --- | --- | --- |
+| `DB_HOST` / `DB_PORT` | `localhost` / `5432` | Servidor PostgreSQL |
+| `DB_NAME` | `library` | Base de datos |
+| `DB_USER` / `DB_PASSWORD` | `library_user` / `library666` | Credenciales |
+| `FLASK_PORT` | `5001` | Puerto del microservicio |
+| `CURRENCY` | `USD` | Atributo `currency` del XML |
+| `DEFAULT_LIMIT` / `MAX_LIMIT` | `8` / `100` | Paginado |
+| `UPLOADS_DIR` | `apps/uploads` | Carpeta de imagenes |
 
-Una vez que el servidor esté ejecutándose, accede a la documentación interactiva:
-
-```
-http://localhost:5000/apidocs
-```
-
-Aquí puedes:
-- Ver todos los endpoints disponibles
-- Ver el esquema de solicitudes/respuestas
-- Probar los endpoints directamente desde el navegador
-
-## Endpoints API
-
-### 1. Obtener todos los libros
-
-**GET** `/api/libros`
+## 3. Ejecucion
 
 ```bash
-curl http://localhost:5000/api/libros
+bash setup.sh     # crea .venv e instala dependencias
+bash run.sh       # arranca en http://0.0.0.0:5001
 ```
 
-**Respuesta:**
-```json
-[
-  {
-    "id": 1,
-    "titulo": "To Kill a Mockingbird",
-    "isbn": "978-0-06-112008-4",
-    "anio_publicacion": 1960,
-    "precio": 15.99,
-    "stock": 45,
-    "formato_id": 1,
-    "categoria_id": 1,
-    "created_at": "2024-01-15T10:30:00"
-  }
-]
-```
+Alternativa con recarga automatica: `bash flask_run.sh`
 
-### 2. Obtener libro por ID
+- Catalogo XML: <http://localhost:5001/books>
+- Swagger: <http://localhost:5001/apidocs/>
 
-**GET** `/api/libros/{id}`
+## 4. Formato de respuesta
+
+Sin `?format` la respuesta es **XML**. Con `?format=json` es **JSON**.
 
 ```bash
-curl http://localhost:5000/api/libros/1
+curl http://localhost:5001/books                      # XML
+curl "http://localhost:5001/books?format=json"        # JSON
 ```
 
-### 3. Buscar libro por ISBN
-
-**GET** `/api/libros/isbn/{isbn}`
-
-```bash
-curl http://localhost:5000/api/libros/isbn/978-0-06-112008-4
+```xml
+<library total="30" page="1" limit="8">
+  <book isbn="978-000-000-01-0">
+    <title>Libro de Prueba 1</title>
+    <authors>
+      <author>Ana Ruiz</author>
+      <author>Luis Paz</author>
+    </authors>
+    <publicationYear>2026</publicationYear>
+    <price currency="USD">979.78</price>
+    <stock>31</stock>
+    <genres><genre>...</genre></genres>
+    <format>Tapa Blanda</format>
+    <category>...</category>
+    <images>
+      <image url="http://localhost:5001/uploads/img_1.svg" path="/uploads/img_1.svg"
+             isCover="true" order="1" altText="Portada de libro 1"/>
+    </images>
+    <concepts>
+      <concept name="..." definition="..."/>
+    </concepts>
+  </book>
+</library>
 ```
 
-### 4. Buscar libros por atributos
+## 5. Endpoints
 
-**GET** `/api/libros/buscar?titulo=...&categoria_id=...&formato_id=...&anio_publicacion=...`
+### Catalogo
+
+| Metodo | Endpoint | Funcion |
+| --- | --- | --- |
+| GET | `/books` | Catalogo paginado (alias que consume Electron) |
+| GET | `/api/libros` | Igual que `/books` |
+| GET | `/api/libros/minimo` | **Datos minimos + imagenes** (para el catalogo) |
+| GET | `/api/libros/<isbn>` | Detalle por ISBN |
+| GET | `/api/libros/isbn/<isbn>` | Alias del detalle |
+| GET | `/api/libros/<isbn>/temas` | Conceptos definidos en ese libro |
+| GET | `/api/libros/buscar` | Filtros `?titulo=&categoria=&formato=&anio=&stock=` |
+
+Parametros comunes de lectura: `?page=1&limit=8&format=xml|json`.
+
+### Escritura (JSON)
+
+| Metodo | Endpoint | Funcion |
+| --- | --- | --- |
+| POST | `/api/libros` | Crear libro |
+| PUT | `/api/libros/<isbn>` | Actualizar campos enviados |
+| PATCH | `/api/libros/<isbn>` | Actualizacion parcial |
+| DELETE | `/api/libros/<isbn>` | Eliminar (204) |
+
+El identificador es el **ISBN**, que es la clave primaria de `libros`.
+`formato` y `categoria` aceptan el nombre o el id; si el nombre no existe se crea.
+Si se envian `autores`, `generos`, `conceptos` o `imagenes`, se reemplazan por los nuevos.
 
 ```bash
-curl "http://localhost:5000/api/libros/buscar?titulo=Mockingbird&categoria_id=1"
-```
-
-**Parámetros de búsqueda:**
-- `titulo`: Búsqueda parcial de título (case-insensitive)
-- `categoria_id`: ID de la categoría
-- `formato_id`: ID del formato
-- `anio_publicacion`: Año exacto de publicación
-
-### 5. Crear un nuevo libro
-
-**POST** `/api/libros`
-
-```bash
-curl -X POST http://localhost:5000/api/libros \
+curl -X POST http://localhost:5001/api/libros \
   -H "Content-Type: application/json" \
   -d '{
-    "titulo": "New Book",
-    "subtitulo": "A Subtitle",
-    "isbn": "978-1-234-56789-0",
-    "anio_publicacion": 2024,
-    "descripcion": "Una descripción del libro",
-    "precio": 29.99,
-    "stock": 100,
-    "formato_id": 1,
-    "categoria_id": 2
+    "isbn": "978-000-000-99-0",
+    "titulo": "Clean Code",
+    "anio": 2008,
+    "precio": 450.00,
+    "stock": 12,
+    "formato": "Tapa Blanda",
+    "categoria": "Programacion",
+    "autores": ["Robert C. Martin"],
+    "generos": ["Desarrollo de Software"],
+    "imagenes": [{"ruta": "/uploads/img_1.svg", "es_portada": true,
+                  "texto_alternativo": "Portada de Clean Code"}]
   }'
+
+curl -X PATCH http://localhost:5001/api/libros/978-000-000-99-0 \
+  -H "Content-Type: application/json" -d '{"stock": 25}'
+
+curl -X DELETE http://localhost:5001/api/libros/978-000-000-99-0
 ```
 
-**Campos requeridos:**
-- `titulo` (string)
-- `formato_id` (integer)
-- `categoria_id` (integer)
+### Imagenes
 
-**Campos opcionales:**
-- `subtitulo` (string)
-- `isbn` (string, única)
-- `anio_publicacion` (integer)
-- `descripcion` (string)
-- `precio` (number, >= 0)
-- `stock` (integer, >= 0)
+`GET /uploads/<archivo>` sirve las portadas de `apps/uploads`.
+En el XML, cada `<image>` trae `url` (absoluta, lista para el `<img>` del cliente)
+y `path` (relativa).
 
-### 6. Actualizar un libro
+### Salud
 
-**PUT** `/api/libros/{id}`
+| Metodo | Endpoint | Funcion |
+| --- | --- | --- |
+| GET | `/api/health` | El microservicio responde |
+| GET | `/api/db-health` | Estado de PostgreSQL y total de libros |
+
+## 6. Estructura
+
+```text
+apps/services/soap/
+├── app.py                  # microservicio Flask (sin blueprints)
+├── library.xml             # diseño XML de referencia
+├── styles.css
+├── requirements.txt
+├── .env.example            # plantilla de configuración
+├── setup.sh / run.sh / flask_run.sh
+└── MICROSERVICE_README.md
+```
+
+## 7. Problemas frecuentes
+
+**`password authentication failed for user "library_user"`**
+La base no existe todavia o la contraseña no coincide:
 
 ```bash
-curl -X PUT http://localhost:5000/api/libros/1 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "titulo": "Updated Title",
-    "precio": 19.99,
-    "stock": 75
-  }'
+psql -U postgres -f ../../db/00_create_database.sql
 ```
 
-Puedes actualizar cualquier cantidad de campos, no es necesario enviar todos.
-
-### 7. Eliminar un libro
-
-**DELETE** `/api/libros/{id}`
-
-```bash
-curl -X DELETE http://localhost:5000/api/libros/1
-```
-
-Devuelve un código 204 (No Content) si tiene éxito.
-
-### 8. Verificar estado del servicio
-
-**GET** `/api/health`
-
-```bash
-curl http://localhost:5000/api/health
-```
-
-**Respuesta:**
-```json
-{
-  "status": "ok",
-  "message": "Library Books API is running"
-}
-```
-
-### 9. Verificar conexión a base de datos
-
-**GET** `/api/db-health`
-
-```bash
-curl http://localhost:5000/api/db-health
-```
-
-**Respuesta si es exitosa:**
-```json
-{
-  "status": "ok",
-  "message": "Database connection successful"
-}
-```
-
-## Manejo de CORS
-
-El microservicio tiene CORS habilitado para aceptar solicitudes desde cualquier dominio. Los headers CORS se incluyen automáticamente en todas las respuestas:
-
-```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
-Access-Control-Allow-Headers: Content-Type, Authorization
-```
-
-Para una configuración más restrictiva en producción, edita `app.py` y modifica:
-
-```python
-CORS(app, resources={r"/api/*": {"origins": ["https://tu-dominio.com"]}})
-```
-
-## Códigos de respuesta HTTP
-
-| Código | Significado |
-|--------|-------------|
-| 200 | OK - Solicitud exitosa |
-| 201 | Created - Recurso creado exitosamente |
-| 204 | No Content - Eliminación exitosa (sin cuerpo) |
-| 400 | Bad Request - Datos inválidos |
-| 404 | Not Found - Recurso no encontrado |
-| 500 | Internal Server Error - Error del servidor |
-
-## Manejo de errores
-
-Todas las respuestas de error incluyen un JSON con detalle:
-
-```json
-{
-  "error": "Descripción del error"
-}
-```
-
-Ejemplos:
-```json
-{"error": "Libro no encontrado"}
-{"error": "Se requiere JSON en el cuerpo de la solicitud"}
-{"error": "Campos requeridos: titulo, formato_id, categoria_id"}
-{"error": "No se pudo conectar a la base de datos"}
-```
-
-## Seguridad
-
-### Credenciales de base de datos
-
-Las credenciales están en un archivo `.env` que **NO debe ser comprometido**:
-
-- ✅ Usa `.env` para desarrollo
-- ✅ En producción, usa variables de entorno del sistema
-- ✅ Nunca hagas commit de `.env` a repositorios públicos
-
-### SQL Injection
-
-Se usan prepared statements con `psycopg2` para prevenir inyecciones SQL:
-
-```python
-cursor.execute("SELECT * FROM libros WHERE isbn = %s", (isbn,))
-```
-
-### CORS
-
-CORS está configurado para aceptar solicitudes desde cualquier origen. En producción, restringe a dominios específicos.
-
-## Serialización de datos
-
-El microservicio serializa correctamente:
-- Números decimales (precios) → float JSON
-- Timestamps PostgreSQL → ISO 8601 string
-- Valores NULL → null JSON
-
-## Ejemplos de uso
-
-### Ejemplo 1: Listar todos los libros
-
-```bash
-curl -s http://localhost:5000/api/libros | python -m json.tool
-```
-
-### Ejemplo 2: Crear un libro
-
-```bash
-curl -X POST http://localhost:5000/api/libros \
-  -H "Content-Type: application/json" \
-  -d '{
-    "titulo": "El Quijote",
-    "isbn": "978-0-7475-3269-9",
-    "anio_publicacion": 1605,
-    "descripcion": "Una de las obras maestras de la literatura española",
-    "precio": 25.00,
-    "stock": 50,
-    "formato_id": 1,
-    "categoria_id": 3
-  }' | python -m json.tool
-```
-
-### Ejemplo 3: Buscar por título
-
-```bash
-curl -s "http://localhost:5000/api/libros/buscar?titulo=quijote" | python -m json.tool
-```
-
-### Ejemplo 4: Actualizar stock
-
-```bash
-curl -X PUT http://localhost:5000/api/libros/1 \
-  -H "Content-Type: application/json" \
-  -d '{"stock": 120}' | python -m json.tool
-```
-
-## Estructura del proyecto
-
-```
-/apps/services/soap/
-├── app.py              # Microservicio principal
-├── requirements.txt    # Dependencias de Python
-├── .env               # Variables de entorno (NO subir a repositorio)
-├── README.md          # Esta documentación
-├── library.xml        # Referencia de diseño XML
-├── server.py          # (Existente) Posible servidor anterior
-└── styles*.css        # (Existente) Estilos para presentación
-```
-
-## Solución de problemas
-
-### Error: "No se pudo conectar a la base de datos"
-
-1. Verifica que PostgreSQL esté ejecutándose:
-   ```bash
-   psql -U library_user -d library -c "SELECT 1"
-   ```
-
-2. Verifica las credenciales en `.env`
-
-3. Verifica que la base de datos y tablas existan:
-   ```bash
-   psql -U library_user -d library -c "\dt"
-   ```
-
-### Error: "Libro no encontrado"
-
-Asegúrate de que el ID existe en la base de datos:
-
-```bash
-psql -U library_user -d library -c "SELECT id FROM libros WHERE id = 1"
-```
-
-### Error CORS
-
-Si obtienes errores CORS desde el navegador:
-
-1. Verifica que el microservicio esté ejecutándose
-2. Verifica que `Flask-CORS` esté instalado: `pip install Flask-CORS`
-3. Revisa la consola del navegador para más detalles
-
-### Puerto en uso
-
-Si el puerto 5000 está en uso:
-
-```bash
-python app.py
-# O cambia el puerto en .env
-```
-
-## Despliegue en producción
-
-### Usando Gunicorn
-
-```bash
-pip install gunicorn
-gunicorn --workers 4 --bind 0.0.0.0:5000 app:app
-```
-
-### Usando Docker
-
-Crea un `Dockerfile`:
-
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-ENV FLASK_APP=app.py
-EXPOSE 5000
-
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
-```
-
-Build:
-```bash
-docker build -t library-api .
-docker run -p 5000:5000 --env-file .env library-api
-```
-
-### Con Nginx (reverse proxy)
-
-```nginx
-upstream library_api {
-    server localhost:5000;
-}
-
-server {
-    listen 80;
-    server_name api.mibiblioteca.com;
-
-    location / {
-        proxy_pass http://library_api;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-## Monitoreo
-
-Accede al endpoint de health regularmente:
-
-```bash
-watch -n 5 'curl -s http://localhost:5000/api/db-health | jq .'
-```
-
-## Licencia
-
-Este proyecto es parte de la librería en línea arquitectura monolítica.
-
-## Soporte
-
-Para problemas o sugerencias, revisa el documento principal README.md en la raíz del proyecto.
+**Las imagenes no cargan (404)**
+Confirma que el archivo exista en `apps/uploads` y que `UPLOADS_DIR` apunte ahi.
+Las rutas del seed son `/uploads/img_<n>.svg`.
+
+**`column ... does not exist`**
+La base tiene el esquema viejo. Aplica `apps/db/03_migracion_verificado.sql`.

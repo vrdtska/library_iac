@@ -1,0 +1,3 @@
+{"error":"Refresh token revocado, ya usado o inexistente"}
+
+HTTP 401

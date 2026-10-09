@@ -1,0 +1,7 @@
+{"email":"prueba_20260929-174151@example.com","id_usuario":33,"message":"Autenticaci\u00f3n exitosa"}
+
+HTTP 200
+
+<?xml version="1.0" encoding="UTF-8"?>
+<response><authenticated>True</authenticated><id_usuario>33</id_usuario><email>prueba_20260929-174151@example.com</email></response>
+HTTP 200

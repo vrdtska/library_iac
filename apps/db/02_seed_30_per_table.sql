@@ -1,39 +1,47 @@
 -- db/02_seed_30_per_table.sql
--- Datos sintéticos para pruebas (mínimo 30 registros donde aplica)
+-- Datos sintéticos para pruebas (30 registros por tabla).
+--
+-- Usuarios de prueba (el microservicio de autenticación valida el hash):
+--     admin@library.com   / Admin123!    (rol Administrador)
+--     user2@library.com   / Usuario123!  (rol Usuario Registrado)
+--     ... hasta user30@library.com
+--
+-- INSERT OR IGNORE no existe en PostgreSQL; si ya hay datos, comenta el bloque
+-- de 'usuarios' o reinicia la base con 00_create_database.sql + 01_schema.sql.
 
-INSERT INTO roles (nombre_rol) VALUES ('Administrador'), ('Usuario Registrado'), ('Auditor');
+INSERT INTO roles (nombre_rol) VALUES ('Administrador'), ('Usuario Registrado'), ('Auditor') ON CONFLICT DO NOTHING;
 
 INSERT INTO usuarios (email, password_hash, id_rol) VALUES
-    ('admin@library.com', 'hash_admin_123', 1),
-    ('user2@library.com', 'hash_user_2', 2),
-    ('user3@library.com', 'hash_user_3', 2),
-    ('user4@library.com', 'hash_user_4', 2),
-    ('user5@library.com', 'hash_user_5', 2),
-    ('user6@library.com', 'hash_user_6', 2),
-    ('user7@library.com', 'hash_user_7', 2),
-    ('user8@library.com', 'hash_user_8', 2),
-    ('user9@library.com', 'hash_user_9', 2),
-    ('user10@library.com', 'hash_user_10', 2),
-    ('user11@library.com', 'hash_user_11', 2),
-    ('user12@library.com', 'hash_user_12', 2),
-    ('user13@library.com', 'hash_user_13', 2),
-    ('user14@library.com', 'hash_user_14', 2),
-    ('user15@library.com', 'hash_user_15', 2),
-    ('user16@library.com', 'hash_user_16', 2),
-    ('user17@library.com', 'hash_user_17', 2),
-    ('user18@library.com', 'hash_user_18', 2),
-    ('user19@library.com', 'hash_user_19', 2),
-    ('user20@library.com', 'hash_user_20', 2),
-    ('user21@library.com', 'hash_user_21', 2),
-    ('user22@library.com', 'hash_user_22', 2),
-    ('user23@library.com', 'hash_user_23', 2),
-    ('user24@library.com', 'hash_user_24', 2),
-    ('user25@library.com', 'hash_user_25', 2),
-    ('user26@library.com', 'hash_user_26', 2),
-    ('user27@library.com', 'hash_user_27', 2),
-    ('user28@library.com', 'hash_user_28', 2),
-    ('user29@library.com', 'hash_user_29', 2),
-    ('user30@library.com', 'hash_user_30', 2);
+    ('admin@library.com', 'pbkdf2:sha256:1000000$UOu5VrLKUxF1zGrm$28d550382ba9e04cc02cc35635ad20fbf7db27fb9d9c706a338ff9a6910a4d42', 1),
+    ('user2@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user3@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user4@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user5@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user6@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user7@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user8@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user9@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user10@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user11@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user12@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user13@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user14@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user15@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user16@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user17@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user18@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user19@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user20@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user21@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user22@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user23@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user24@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user25@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user26@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user27@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user28@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user29@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2),
+    ('user30@library.com', 'pbkdf2:sha256:1000000$ayphJGMKuarGc8p4$2ddc7432f71987197b1d6688d5764f0b8c37e44f35d39a1330a26e27c41ec922', 2) ON CONFLICT DO NOTHING;
 
 INSERT INTO formatos (nombre_formato) VALUES
     ('Tapa Blanda'),
@@ -65,7 +73,7 @@ INSERT INTO formatos (nombre_formato) VALUES
     ('Formato 27'),
     ('Formato 28'),
     ('Formato 29'),
-    ('Formato 30');
+    ('Formato 30') ON CONFLICT DO NOTHING;
 
 INSERT INTO categorias (nombre_categoria) VALUES
     ('Educación Superior'),
@@ -97,7 +105,7 @@ INSERT INTO categorias (nombre_categoria) VALUES
     ('Categoria 27'),
     ('Categoria 28'),
     ('Categoria 29'),
-    ('Categoria 30');
+    ('Categoria 30') ON CONFLICT DO NOTHING;
 
 INSERT INTO autores (nombre_autor) VALUES
     ('Autor 1 Apellido'),
@@ -129,7 +137,7 @@ INSERT INTO autores (nombre_autor) VALUES
     ('Autor 27 Apellido'),
     ('Autor 28 Apellido'),
     ('Autor 29 Apellido'),
-    ('Autor 30 Apellido');
+    ('Autor 30 Apellido') ON CONFLICT DO NOTHING;
 
 INSERT INTO generos (nombre_genero) VALUES
     ('Tecnología'),
@@ -161,7 +169,7 @@ INSERT INTO generos (nombre_genero) VALUES
     ('Genero 27'),
     ('Genero 28'),
     ('Genero 29'),
-    ('Genero 30');
+    ('Genero 30') ON CONFLICT DO NOTHING;
 
 INSERT INTO conceptos (termino) VALUES
     ('IaaS'),
@@ -193,7 +201,7 @@ INSERT INTO conceptos (termino) VALUES
     ('Concepto_27'),
     ('Concepto_28'),
     ('Concepto_29'),
-    ('Concepto_30');
+    ('Concepto_30') ON CONFLICT DO NOTHING;
 
 INSERT INTO libros (isbn, titulo, anio, precio, stock, id_formato, id_categoria) VALUES
     ('978-000-000-01-0', 'Libro de Prueba 1', 2026, 979.78, 31, 21, 30),
@@ -225,7 +233,7 @@ INSERT INTO libros (isbn, titulo, anio, precio, stock, id_formato, id_categoria)
     ('978-000-000-27-0', 'Libro de Prueba 27', 2026, 879.3, 22, 21, 5),
     ('978-000-000-28-0', 'Libro de Prueba 28', 2026, 900.92, 12, 23, 21),
     ('978-000-000-29-0', 'Libro de Prueba 29', 2026, 494.39, 86, 25, 5),
-    ('978-000-000-30-0', 'Libro de Prueba 30', 2026, 201.37, 55, 10, 7);
+    ('978-000-000-30-0', 'Libro de Prueba 30', 2026, 201.37, 55, 10, 7) ON CONFLICT DO NOTHING;
 
 INSERT INTO libro_autor (isbn, id_autor) VALUES
     ('978-000-000-01-0', 1),
@@ -257,7 +265,7 @@ INSERT INTO libro_autor (isbn, id_autor) VALUES
     ('978-000-000-27-0', 27),
     ('978-000-000-28-0', 28),
     ('978-000-000-29-0', 29),
-    ('978-000-000-30-0', 30);
+    ('978-000-000-30-0', 30) ON CONFLICT DO NOTHING;
 
 INSERT INTO libro_genero (isbn, id_genero) VALUES
     ('978-000-000-01-0', 1),
@@ -289,7 +297,7 @@ INSERT INTO libro_genero (isbn, id_genero) VALUES
     ('978-000-000-27-0', 27),
     ('978-000-000-28-0', 28),
     ('978-000-000-29-0', 29),
-    ('978-000-000-30-0', 30);
+    ('978-000-000-30-0', 30) ON CONFLICT DO NOTHING;
 
 INSERT INTO libro_concepto (isbn, id_concepto, definicion_en_libro) VALUES
     ('978-000-000-01-0', 1, 'Definición de prueba para el concepto 1'),
@@ -321,37 +329,87 @@ INSERT INTO libro_concepto (isbn, id_concepto, definicion_en_libro) VALUES
     ('978-000-000-27-0', 27, 'Definición de prueba para el concepto 27'),
     ('978-000-000-28-0', 28, 'Definición de prueba para el concepto 28'),
     ('978-000-000-29-0', 29, 'Definición de prueba para el concepto 29'),
-    ('978-000-000-30-0', 30, 'Definición de prueba para el concepto 30');
+    ('978-000-000-30-0', 30, 'Definición de prueba para el concepto 30') ON CONFLICT DO NOTHING;
 
+-- Las imágenes se sirven en /uploads/<archivo> (microservicio de libros).
 INSERT INTO libro_imagenes (isbn, file_path, es_portada, texto_alternativo) VALUES
-    ('978-000-000-01-0', '/uploads/img_1.jpg', TRUE, 'Portada de libro 1'),
-    ('978-000-000-02-0', '/uploads/img_2.jpg', TRUE, 'Portada de libro 2'),
-    ('978-000-000-03-0', '/uploads/img_3.jpg', TRUE, 'Portada de libro 3'),
-    ('978-000-000-04-0', '/uploads/img_4.jpg', TRUE, 'Portada de libro 4'),
-    ('978-000-000-05-0', '/uploads/img_5.jpg', TRUE, 'Portada de libro 5'),
-    ('978-000-000-06-0', '/uploads/img_6.jpg', TRUE, 'Portada de libro 6'),
-    ('978-000-000-07-0', '/uploads/img_7.jpg', TRUE, 'Portada de libro 7'),
-    ('978-000-000-08-0', '/uploads/img_8.jpg', TRUE, 'Portada de libro 8'),
-    ('978-000-000-09-0', '/uploads/img_9.jpg', TRUE, 'Portada de libro 9'),
-    ('978-000-000-10-0', '/uploads/img_10.jpg', TRUE, 'Portada de libro 10'),
-    ('978-000-000-11-0', '/uploads/img_11.jpg', TRUE, 'Portada de libro 11'),
-    ('978-000-000-12-0', '/uploads/img_12.jpg', TRUE, 'Portada de libro 12'),
-    ('978-000-000-13-0', '/uploads/img_13.jpg', TRUE, 'Portada de libro 13'),
-    ('978-000-000-14-0', '/uploads/img_14.jpg', TRUE, 'Portada de libro 14'),
-    ('978-000-000-15-0', '/uploads/img_15.jpg', TRUE, 'Portada de libro 15'),
-    ('978-000-000-16-0', '/uploads/img_16.jpg', TRUE, 'Portada de libro 16'),
-    ('978-000-000-17-0', '/uploads/img_17.jpg', TRUE, 'Portada de libro 17'),
-    ('978-000-000-18-0', '/uploads/img_18.jpg', TRUE, 'Portada de libro 18'),
-    ('978-000-000-19-0', '/uploads/img_19.jpg', TRUE, 'Portada de libro 19'),
-    ('978-000-000-20-0', '/uploads/img_20.jpg', TRUE, 'Portada de libro 20'),
-    ('978-000-000-21-0', '/uploads/img_21.jpg', TRUE, 'Portada de libro 21'),
-    ('978-000-000-22-0', '/uploads/img_22.jpg', TRUE, 'Portada de libro 22'),
-    ('978-000-000-23-0', '/uploads/img_23.jpg', TRUE, 'Portada de libro 23'),
-    ('978-000-000-24-0', '/uploads/img_24.jpg', TRUE, 'Portada de libro 24'),
-    ('978-000-000-25-0', '/uploads/img_25.jpg', TRUE, 'Portada de libro 25'),
-    ('978-000-000-26-0', '/uploads/img_26.jpg', TRUE, 'Portada de libro 26'),
-    ('978-000-000-27-0', '/uploads/img_27.jpg', TRUE, 'Portada de libro 27'),
-    ('978-000-000-28-0', '/uploads/img_28.jpg', TRUE, 'Portada de libro 28'),
-    ('978-000-000-29-0', '/uploads/img_29.jpg', TRUE, 'Portada de libro 29'),
-    ('978-000-000-30-0', '/uploads/img_30.jpg', TRUE, 'Portada de libro 30');
+    ('978-000-000-01-0', '/uploads/img_1.svg', TRUE, 'Portada de libro 1'),
+    ('978-000-000-02-0', '/uploads/img_2.svg', TRUE, 'Portada de libro 2'),
+    ('978-000-000-03-0', '/uploads/img_3.svg', TRUE, 'Portada de libro 3'),
+    ('978-000-000-04-0', '/uploads/img_4.svg', TRUE, 'Portada de libro 4'),
+    ('978-000-000-05-0', '/uploads/img_5.svg', TRUE, 'Portada de libro 5'),
+    ('978-000-000-06-0', '/uploads/img_6.svg', TRUE, 'Portada de libro 6'),
+    ('978-000-000-07-0', '/uploads/img_7.svg', TRUE, 'Portada de libro 7'),
+    ('978-000-000-08-0', '/uploads/img_8.svg', TRUE, 'Portada de libro 8'),
+    ('978-000-000-09-0', '/uploads/img_9.svg', TRUE, 'Portada de libro 9'),
+    ('978-000-000-10-0', '/uploads/img_10.svg', TRUE, 'Portada de libro 10'),
+    ('978-000-000-11-0', '/uploads/img_11.svg', TRUE, 'Portada de libro 11'),
+    ('978-000-000-12-0', '/uploads/img_12.svg', TRUE, 'Portada de libro 12'),
+    ('978-000-000-13-0', '/uploads/img_13.svg', TRUE, 'Portada de libro 13'),
+    ('978-000-000-14-0', '/uploads/img_14.svg', TRUE, 'Portada de libro 14'),
+    ('978-000-000-15-0', '/uploads/img_15.svg', TRUE, 'Portada de libro 15'),
+    ('978-000-000-16-0', '/uploads/img_16.svg', TRUE, 'Portada de libro 16'),
+    ('978-000-000-17-0', '/uploads/img_17.svg', TRUE, 'Portada de libro 17'),
+    ('978-000-000-18-0', '/uploads/img_18.svg', TRUE, 'Portada de libro 18'),
+    ('978-000-000-19-0', '/uploads/img_19.svg', TRUE, 'Portada de libro 19'),
+    ('978-000-000-20-0', '/uploads/img_20.svg', TRUE, 'Portada de libro 20'),
+    ('978-000-000-21-0', '/uploads/img_21.svg', TRUE, 'Portada de libro 21'),
+    ('978-000-000-22-0', '/uploads/img_22.svg', TRUE, 'Portada de libro 22'),
+    ('978-000-000-23-0', '/uploads/img_23.svg', TRUE, 'Portada de libro 23'),
+    ('978-000-000-24-0', '/uploads/img_24.svg', TRUE, 'Portada de libro 24'),
+    ('978-000-000-25-0', '/uploads/img_25.svg', TRUE, 'Portada de libro 25'),
+    ('978-000-000-26-0', '/uploads/img_26.svg', TRUE, 'Portada de libro 26'),
+    ('978-000-000-27-0', '/uploads/img_27.svg', TRUE, 'Portada de libro 27'),
+    ('978-000-000-28-0', '/uploads/img_28.svg', TRUE, 'Portada de libro 28'),
+    ('978-000-000-29-0', '/uploads/img_29.svg', TRUE, 'Portada de libro 29'),
+    ('978-000-000-30-0', '/uploads/img_30.svg', TRUE, 'Portada de libro 30') ON CONFLICT DO NOTHING;
 
+
+-- ---------------------------------------------------------------------------
+-- perfiles_usuario (30 registros): perfil 1:1 de cada cuenta.
+-- Los nombres NO viven en 'usuarios' (están normalizados aquí), así que se
+-- derivan de la tabla de usuarios en el mismo orden en que se insertaron.
+-- ON CONFLICT lo deja idempotente: se puede re-ejecutar sin duplicar.
+-- ---------------------------------------------------------------------------
+INSERT INTO perfiles_usuario (id_usuario, nombre, apellido_paterno, apellido_materno)
+SELECT u.id_usuario, p.nombre, p.apellido_paterno, p.apellido_materno
+FROM (
+    SELECT id_usuario, ROW_NUMBER() OVER (ORDER BY id_usuario) AS rn
+    FROM usuarios
+) u
+JOIN (
+    SELECT ROW_NUMBER() OVER () AS rn, v.*
+    FROM (VALUES
+        ('María',      'López',      'García'),
+        ('José',       'Hernández',  'Martínez'),
+        ('Guadalupe',  'Sánchez',    'Ramírez'),
+        ('Juan Carlos','Torres',     'Flores'),
+        ('Ana María',  'Ruiz',       'Castillo'),
+        ('Francisco Javier','Morales','Vargas'),
+        ('Rosa Elena', 'Jiménez',    'Cruz'),
+        ('Miguel Ángel','Rivera',    'Ortiz'),
+        ('Patricia',   'Gómez',      'Luna'),
+        ('Ricardo',    'Mendoza',    'Peña'),
+        ('Laura',      'Fernández',  'Castillo'),
+        ('Alejandro',  'Vargas',     'Ríos'),
+        ('Carmen',     'Delgado',    'Soto'),
+        ('Fernando',   'Ortiz',      'Nava'),
+        ('Adriana',    'Romero',     'Salas'),
+        ('Eduardo',    'Navarro',    'Cortés'),
+        ('Gabriela',   'Fuentes',    'Mora'),
+        ('Héctor',     'Silva',      'Barrera'),
+        ('Isabel',     'Cortés',     'Reyes'),
+        ('Jorge Alberto','Núñez',    'Aguilar'),
+        ('Karla',      'Méndez',     'Prieto'),
+        ('Luis Fernando','Guerrero', 'Lara'),
+        ('Mariana',    'Escobar',    'Villa'),
+        ('Nicolás',    'Ramos',      'Ochoa'),
+        ('Olga',       'Herrera',    'Salgado'),
+        ('Pablo',      'Cervantes',  'León'),
+        ('Raquel',     'Aguilar',    'Sandoval'),
+        ('Sergio',     'Domínguez',  'Paredes'),
+        ('Teresa',     'Valdez',     'Acosta'),
+        ('Andrés',     'Zamora',     'Beltrán')
+    ) v(nombre, apellido_paterno, apellido_materno)
+) p ON p.rn = u.rn
+ON CONFLICT (id_usuario) DO NOTHING;

@@ -1,0 +1,4 @@
+--- primer uso (debe 200) ---
+{"_links":{"logout":"/logout","self":"/refresh"},"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJhZG1pbkBsaWJyYXJ5LmNvbSIsInJvbCI6IkFkbWluaXN0cmFkb3IiLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiZDc3ZjU2YTUtMGIxMS00YmFhLThiNzQtZDM1NDg0OTdjMWRjIiwiaWF0IjoxNzkxMzI3MTMzLCJleHAiOjE3OTEzMjgwMzMsImlzcyI6ImxpYnJlcmlhLWxvZ2luIn0.UuT1fUgt5EKoeHK_bUR3mKxTJSPZy9TZj4-sopTtPYI","email":"admi
+--- reuso del mismo refresh (debe 401) ---
+HTTP 401

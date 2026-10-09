@@ -1,0 +1,3 @@
+{"_links":{"login":"/login","self":"/register","verify_email":"http://127.0.0.1:5002/verify-email/Impzb25fcHJ1ZWJhXzIwMjYwOTI5LTE3NDE1MUBleGFtcGxlLmNvbSI.arxMvw.VW_C6mdeFdZCMgm0hPLrO1Vm4gw?format=json"},"email":"json_prueba_20260929-174151@example.com","id_usuario":34,"message":"Usuario registrado exitosamente","verificado":true}
+
+HTTP 201
