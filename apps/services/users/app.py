@@ -13,7 +13,7 @@ from flask_cors import CORS
 from psycopg.rows import dict_row
 from werkzeug.security import generate_password_hash
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common import redis_store  # noqa: E402
 from common.auth import exigir_jwt, quien, respuesta_auth  # noqa: E402
 

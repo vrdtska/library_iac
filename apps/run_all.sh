@@ -20,7 +20,11 @@ set -u
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$APP_DIR/logs"
-PY="${PYTHON:-python3}"
+if [ -z "${PYTHON:-}" ] && [ -x "$APP_DIR/.venv/bin/python" ]; then
+    PY="$APP_DIR/.venv/bin/python"
+else
+    PY="${PYTHON:-python3}"
+fi
 mkdir -p "$LOG_DIR"
 
 SERVICIOS=(login soap users authors pedidos pagos)
@@ -52,6 +56,7 @@ arrancar() {
             continue
         fi
         ( cd "$dir" && \
+          PYTHONPATH="$APP_DIR${PYTHONPATH:+:$PYTHONPATH}" \
           FLASK_PORT="$puerto" "$PY" app.py > "$LOG_DIR/$svc.log" 2>&1 & \
           echo $! > "$LOG_DIR/$svc.pid" )
         echo "[..] $svc arrancando en :$puerto (log: logs/$svc.log)"

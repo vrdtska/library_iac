@@ -27,7 +27,7 @@ from flask import Flask, Response, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 from psycopg.rows import dict_row
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common import redis_store  # Redis: revocacion JWT + cache catalogo
 
 load_dotenv()
@@ -212,6 +212,9 @@ def exigir_jwt_en_escrituras():
     """Protege POST/PUT/PATCH/DELETE. GET/HEAD/OPTIONS quedan publicos."""
     if request.method not in PROTECTED_METHODS:
         return None  # lecturas publicas (catalogo, imagenes, salud)
+
+    if request.path.startswith("/api/chat"):
+        return None  # consultas al chatbot del catalogo (publicas)
 
     if not JWT_SECRET:
         # Falla cerrado: sin secreto no se puede validar nada.
@@ -1130,6 +1133,16 @@ def no_encontrado(error):
 @app.errorhandler(500)
 def error_servidor(error):
     return format_response({"error": "Error interno del servidor"}, 500)
+
+
+# ---------------------------------------------------------------------------
+# Chatbot con Ollama y sugerencias contextuales
+# ---------------------------------------------------------------------------
+try:
+    from ollama_chat import chat_bp
+    app.register_blueprint(chat_bp)
+except Exception as _chat_err:
+    print(f"Aviso: no se pudo cargar ollama_chat: {_chat_err}")
 
 
 if __name__ == "__main__":

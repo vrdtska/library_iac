@@ -155,6 +155,15 @@ y `path` (relativa).
 | GET | `/api/health` | El microservicio responde |
 | GET | `/api/db-health` | Estado de PostgreSQL y total de libros |
 
+### Chatbot con Ollama & Sugerencias Contextuales
+
+| Metodo | Endpoint | Funcion |
+| --- | --- | --- |
+| POST | `/api/chat` | Chatbot con contexto del catálogo en streaming (`application/x-ndjson`) |
+| POST | `/api/chat/simple` | Chatbot con respuesta completa en JSON (`{"respuesta": "..."}`) |
+| GET | `/api/sugerencias` | Sugerencias no invasivas breves (`?isbn=...&accion=...&pagina=...`) |
+| GET | `/api/chat/estado` | Estado de conexión con Ollama y modelos disponibles |
+
 ## 6. Estructura
 
 ```text

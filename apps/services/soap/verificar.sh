@@ -64,5 +64,17 @@ else
       -H 'Content-Type: application/json' -d "{\"refresh_token\":\"$REFRESH\"}"
   } | tee "$SALIDA/$FECHA-7-refresh.txt"
 fi
+
+echo "[8/8] Endpoints de Ollama Chatbot & Sugerencias"
+{
+  echo "--- Estado de Ollama ---"
+  curl -s -w '\nHTTP %{http_code}\n' "$BASE/api/chat/estado"
+  echo "--- Sugerencia contextual ---"
+  curl -s -w '\nHTTP %{http_code}\n' "$BASE/api/sugerencias?isbn=978-000-000-01-0"
+  echo "--- Consulta al Chatbot ---"
+  curl -s -w '\nHTTP %{http_code}\n' -X POST "$BASE/api/chat/simple" -H 'Content-Type: application/json' \
+    -d '{"mensaje":"¿Qué libro define IaaS?"}'
+} | tee "$SALIDA/$FECHA-8-ollama-chat.txt"
+
 echo
 echo "Evidencias en: $SALIDA"

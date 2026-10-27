@@ -1,0 +1,12 @@
+--- Estado de Ollama ---
+{"modelo_configurado":"llama3.2","modelo_listo":true,"modelos_disponibles":["llama3.2:latest"],"ollama":"connected","url":"http://localhost:9000"}
+
+HTTP 200
+--- Sugerencia contextual ---
+{"accion":"navegar","isbn":"978-000-000-01-0","sugerencia":"Si te interesa la nube y sus aplicaciones, tambi\u00e9n podr\u00edas leer \"La nube como servicio\" de Autor X","tipo":"tip"}
+
+HTTP 200
+--- Consulta al Chatbot ---
+{"respuesta":"El libro que define el concepto de IaaS (Infrastructure as a Service) es el libro con ISBN 978-000-000-01-0, titulado \"Libro de Prueba 1\". En este libro, se encuentra la definici\u00f3n exacta de IaaS, junto con otros conceptos t\u00e9cnicos."}
+
+HTTP 200

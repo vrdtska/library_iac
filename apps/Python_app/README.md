@@ -1,6 +1,8 @@
 # Cliente de escritorio Python
 
-Cliente Tkinter para los microservicios de autenticación y libros. No accede directamente a PostgreSQL; todas las operaciones usan HTTP.
+Cliente Tkinter que consume **los 6 microservicios** de la librería
+(login, books, users, authors, pedidos y pagos). No accede directamente a
+PostgreSQL; todas las operaciones usan HTTP con JWT (`Authorization: Bearer`).
 
 ## Requisitos
 
@@ -20,21 +22,20 @@ Ejecución:
 python client_app.py
 ```
 
-## URLs
+## URLs (por omisión, locales vía `apps/run_all.sh`)
 
-Valores iniciales:
+| Servicio | URL por omisión |
+|---|---|
+| login (auth) | `http://localhost:5000` |
+| books (libros) | `http://localhost:5001/books` |
+| users (usuarios) | `http://localhost:5003` |
+| authors (autores) | `http://localhost:5004` |
+| pedidos | `http://localhost:5005` |
+| pagos | `http://localhost:5006` |
 
-- Autenticación remota: `http://34.51.108.65:5000`
-- Libros remoto: `http://34.51.108.65:5001/books`
-
-Desde **Configuración del servidor** se pueden cambiar por las URLs públicas de GCP. La configuración se persiste en `~/.libreria_cliente.json`.
-
-Para pruebas locales, cambia las URLs desde **Configuración del servidor** a:
-
-- Autenticación local: `http://localhost:5000`
-- Libros local: `http://localhost:5001/books`
-
-La configuración remota predeterminada de esta entrega apunta a `34.51.108.65`.
+Desde **Configuración del servidor** se pueden cambiar las 6 URLs. La
+configuración se persiste en `~/.libreria_cliente.json`. Tras guardar, el
+cliente reconstruye el `ApiClient` con todas las URLs.
 
 La aplicación no concede acceso usando únicamente información local. Al iniciar siempre llama `GET /session`; sin conectividad o con una respuesta `401`, vuelve al login de forma controlada. Esto evita confundir un usuario recordado con una sesión de servidor todavía válida.
 
@@ -55,10 +56,31 @@ La aplicación no concede acceso usando únicamente información local. Al inici
 
 ## Estado del backend revisado
 
-El cliente implementa health checks periódicos cada 30 segundos, comprobación manual y estados visuales: 🟢 servicio y dependencia disponibles, 🟡 respuesta accesible pero degradada, 🔴 error de conexión o sin respuesta. La pantalla muestra fecha/hora de la última comprobación.
+El cliente implementa health checks periódicos cada 30 segundos, comprobación
+manual y estados visuales: 🟢 servicio y dependencia disponibles, 🟡 respuesta
+accesible pero degradada, 🔴 error de conexión o sin respuesta. La pantalla
+comprueba **los 6 microservicios** (login, books, users, authors, pedidos, pagos)
+y muestra la fecha/hora de la última comprobación.
 
-El microservicio de autenticación disponible en este repositorio implementa `/register`, `/login`, `/logout`, `/session` y `/verify-email/<token>`. No se encontraron implementaciones de `/verify`, `/session/extend` ni `/profile`; el cliente llama esos endpoints porque forman parte de la actividad y muestra un mensaje claro si el servicio responde `404`.
+El microservicio de autenticación (`apps/services/login/app.py`) implementa
+`/register`, `/login`, `/logout`, `/refresh`, `/session`, `/session/extend`,
+`/profile` y `/verify-email/<token>`. Emite el par de tokens (access 20 min,
+refresh 24 h) y usa Redis para sesión, refresh y revocación.
 
-El servicio de libros está en `apps/services/soap/app.py` y expone `/books` con XML por defecto y JSON al usar `?format=json`. El cliente usa `/api/libros` para CRUD, `/api/libros/isbn/<isbn>` para detalle y `/api/db-health` para comprobar la base de datos. El panel separa catálogo, administración de libros, estado de servicios, sesión/perfil y configuración del servidor.
+El servicio de libros (`apps/services/soap/app.py`) expone `/books` (XML por
+defecto, JSON con `?format=json`), con caché Redis (`X-Cache: HIT/MISS`) e
+invalidación tras cada escritura. El cliente usa `/api/libros` para CRUD,
+`/api/libros/isbn/<isbn>` para detalle y `/api/db-health` para la base.
 
-El repositorio revisado no expone literalmente todos los endpoints del enunciado: el CRUD disponible usa `/api/libros/<id>`, no `/books/<isbn>`, y actualmente implementa `PUT` pero no `PATCH`. La interfaz llama `PATCH` para demostrar la diferencia requerida y presenta el error HTTP real si el backend aún no lo soporta; no oculta ni simula la operación.
+Además del catálogo, el panel incluye **CRUD completo** de los 4 microservicios
+nuevos, todos con `Authorization: Bearer <access_token>`:
+
+* **Usuarios** (`:5003`) — listar/crear/editar/eliminar (`GET/POST/PUT/DELETE /users`).
+* **Autores** (`:5004`) — CRUD de `/authors` y consulta de libros por autor.
+* **Pedidos** (`:5005`) — crear (descuenta stock), cambiar estado (`PATCH /pedidos/<id>/estado`),
+  cancelar (`DELETE`) y ver detalle.
+* **Pagos** (`:5006`) — registrar pago (`POST /pagos`), listar y consultar por pedido.
+
+Ante un `401` por access caducado, el cliente renueva con `POST /refresh` y
+reintenta la operación una vez. Los botones de eliminar piden confirmación y
+todas las operaciones se ejecutan contra el microservicio remoto.

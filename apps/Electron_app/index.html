@@ -47,6 +47,48 @@
         </div>
     </main>
 
+    <!-- Botón flotante para abrir el asistente inteligente -->
+    <button id="chatFab" class="chat-fab" title="Consultar al Asistente Técnico">
+        <span class="chat-fab-icon">💬</span>
+        <span class="chat-fab-label">Asistente IA</span>
+    </button>
+
+    <!-- Drawer lateral del Chatbot especializado -->
+    <aside id="chatDrawer" class="chat-drawer hidden">
+        <div class="chat-header">
+            <div class="chat-header-title">
+                <span class="chat-robot-icon">🤖</span>
+                <div>
+                    <h3>Asistente de la Librería</h3>
+                    <span id="chatStatus" class="chat-status chat-status-checking">Conectando…</span>
+                </div>
+            </div>
+            <button id="chatClose" class="chat-close-btn" title="Cerrar panel">✕</button>
+        </div>
+
+        <div class="chat-quick-chips">
+            <button class="chip-btn" data-query="¿Qué libros explican conceptos en la nube o IaaS?">☁️ Conceptos Cloud</button>
+            <button class="chip-btn" data-query="¿Cuáles son los libros de tecnología con mejor stock?">📚 Stock Tecnología</button>
+            <button class="chip-btn" data-query="Recomiéndame un libro para estudiantes universitarios">🎓 Educación</button>
+        </div>
+
+        <div id="chatMessages" class="chat-messages">
+            <div class="chat-bubble assistant">
+                ¡Hola! Soy tu asistente especializado de la <strong>Librería EG</strong>. 
+                Conozco todos los libros del catálogo, sus autores, géneros y los conceptos técnicos que explican. 
+                ¿En qué puedo ayudarte hoy?
+            </div>
+        </div>
+
+        <form id="chatForm" class="chat-input-area">
+            <input type="text" id="chatInput" class="chat-input" placeholder="Pregunta sobre libros, conceptos o precios…" autocomplete="off">
+            <button type="submit" id="chatSendBtn" class="chat-send-btn" title="Enviar consulta">➤</button>
+        </form>
+    </aside>
+
+    <!-- Contenedor de Sugerencias No Invasivas (Toast Notifications) -->
+    <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
     <script>
         // =====================================================================
         // Configuración persistente (LocalStorage)
@@ -240,6 +282,312 @@
         $('nextBtn').onclick = () => { currentPage++; cargarCatalogo(); };
 
         cargarCatalogo();
+
+        // =====================================================================
+        // Chatbot Especializado con Ollama (Asistente Técnico)
+        // =====================================================================
+        const chatHistorial = [];
+        let chatAbierto = false;
+        let enviandoMensaje = false;
+
+        function toggleChat(abrir = null) {
+            chatAbierto = abrir !== null ? abrir : !chatAbierto;
+            const drawer = $('chatDrawer');
+            const fab = $('chatFab');
+            if (chatAbierto) {
+                drawer.classList.remove('hidden');
+                fab.classList.add('chat-fab-active');
+                $('chatInput').focus();
+                verificarEstadoOllama();
+            } else {
+                drawer.classList.add('hidden');
+                fab.classList.remove('chat-fab-active');
+            }
+        }
+
+        $('chatFab').onclick = () => toggleChat();
+        $('chatClose').onclick = () => toggleChat(false);
+
+        // Chips de preguntas rápidas
+        document.querySelectorAll('.chip-btn').forEach(btn => {
+            btn.onclick = () => {
+                const query = btn.getAttribute('data-query');
+                if (query) {
+                    $('chatInput').value = query;
+                    enviarPreguntaChat(query);
+                }
+            };
+        });
+
+        async function verificarEstadoOllama() {
+            const statusEl = $('chatStatus');
+            try {
+                const res = await fetch(`${config.baseUrl}/api/chat/estado`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (data.ollama === 'connected' && data.modelo_listo) {
+                    statusEl.textContent = `● En línea (${data.modelo_configurado})`;
+                    statusEl.className = 'chat-status chat-status-ok';
+                } else if (data.ollama === 'connected') {
+                    statusEl.textContent = `▲ Modelo ${data.modelo_configurado} cargando…`;
+                    statusEl.className = 'chat-status chat-status-warning';
+                } else {
+                    statusEl.textContent = '○ Ollama desconectado';
+                    statusEl.className = 'chat-status chat-status-error';
+                }
+            } catch (err) {
+                statusEl.textContent = '○ Microservicio sin conexión';
+                statusEl.className = 'chat-status chat-status-error';
+            }
+        }
+
+        function agregarBurbuja(rol, textoHtml, claseExtra = '') {
+            const contenedor = $('chatMessages');
+            const burbuja = document.createElement('div');
+            burbuja.className = `chat-bubble ${rol} ${claseExtra}`.trim();
+            burbuja.innerHTML = textoHtml;
+            contenedor.appendChild(burbuja);
+            contenedor.scrollTop = contenedor.scrollHeight;
+            return burbuja;
+        }
+
+        async function enviarPreguntaChat(mensajeTexto) {
+            if (enviandoMensaje || !mensajeTexto) return;
+            enviandoMensaje = true;
+            $('chatSendBtn').disabled = true;
+            $('chatInput').value = '';
+
+            // Renderizar burbuja del usuario
+            agregarBurbuja('user', escapeHtml(mensajeTexto));
+            chatHistorial.push({ rol: 'user', contenido: mensajeTexto });
+
+            // Burbuja temporal del asistente
+            const burbujaAsistente = agregarBurbuja('assistant', '<em>Pensando con Ollama…</em>');
+
+            try {
+                const resp = await fetch(`${config.baseUrl}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mensaje: mensajeTexto,
+                        historial: chatHistorial.slice(-8)
+                    })
+                });
+
+                if (!resp.ok) {
+                    throw new Error(`Error ${resp.status} al consultar el microservicio`);
+                }
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let acumulado = '';
+                burbujaAsistente.innerHTML = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lineas = chunk.split('\n');
+
+                    for (const linea of lineas) {
+                        const trimmed = linea.trim();
+                        if (!trimmed) continue;
+                        try {
+                            const parsed = JSON.parse(trimmed);
+                            if (parsed.error) {
+                                throw new Error(parsed.error);
+                            }
+                            if (parsed.fragmento) {
+                                acumulado += parsed.fragmento;
+                                burbujaAsistente.innerHTML = formatearTextoRespuesta(acumulado);
+                                $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+                            }
+                        } catch (pErr) {
+                            // Fragmento parcial de JSON, continúa leyendo
+                        }
+                    }
+                }
+
+                if (!acumulado) {
+                    burbujaAsistente.innerHTML = 'No se recibió respuesta del modelo. Por favor intenta de nuevo.';
+                } else {
+                    chatHistorial.push({ rol: 'assistant', contenido: acumulado });
+                }
+
+            } catch (err) {
+                // Fallback a /api/chat/simple si falla streaming
+                try {
+                    burbujaAsistente.innerHTML = '<em>Reintentando vía endpoint directo…</em>';
+                    const fallbackResp = await fetch(`${config.baseUrl}/api/chat/simple`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mensaje: mensajeTexto, historial: chatHistorial.slice(-8) })
+                    });
+                    if (fallbackResp.ok) {
+                        const fData = await fallbackResp.json();
+                        const ans = fData.respuesta || 'Sin respuesta';
+                        burbujaAsistente.innerHTML = formatearTextoRespuesta(ans);
+                        chatHistorial.push({ rol: 'assistant', contenido: ans });
+                        return;
+                    }
+                } catch (_) {}
+
+                burbujaAsistente.innerHTML = `<span class="error-msg">⚠️ Error: ${err.message}. Verifica que el microservicio y Ollama estén activos.</span>`;
+            } finally {
+                enviandoMensaje = false;
+                $('chatSendBtn').disabled = false;
+                $('chatInput').focus();
+            }
+        }
+
+        $('chatForm').onsubmit = (e) => {
+            e.preventDefault();
+            const texto = $('chatInput').value.trim();
+            if (texto) enviarPreguntaChat(texto);
+        };
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag] || tag));
+        }
+
+        function formatearTextoRespuesta(texto) {
+            // Conversión básica de markdown a HTML para las respuestas del LLM
+            let html = escapeHtml(texto);
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            html = html.replace(/\n\n/g, '<br><br>');
+            html = html.replace(/\n- /g, '<br>• ');
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        // =====================================================================
+        // Sistema de Sugerencias No Invasivas (Toast Notifications)
+        // =====================================================================
+        let ultimaSugerenciaTimestamp = 0;
+        const COOLDOWN_SUGERENCIAS = 35000; // Mínimo 35s entre sugerencias automáticas
+        let timerHoverCard = null;
+
+        function mostrarSugerenciaNoInvasiva(texto, isbnRelacionado = null) {
+            if (!texto || chatAbierto) return;
+
+            const contenedor = $('toastContainer');
+            // Máximo 1 toast visible simultáneo para no saturar la vista
+            const existente = contenedor.querySelector('.toast');
+            if (existente) existente.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-enter';
+            toast.innerHTML = `
+                <div class="toast-icon">💡</div>
+                <div class="toast-content">
+                    <span class="toast-badge">Sugerencia inteligente</span>
+                    <p class="toast-text">${escapeHtml(texto)}</p>
+                    <div class="toast-actions">
+                        <button class="toast-action-btn">Preguntar al Asistente</button>
+                    </div>
+                </div>
+                <button class="toast-close" title="Cerrar sugerencia">&times;</button>
+                <div class="toast-progress"></div>
+            `;
+
+            // Botón para cerrar
+            toast.querySelector('.toast-close').onclick = () => {
+                desvanecerToast(toast);
+            };
+
+            // Botón para preguntar directamente al chat sobre la sugerencia
+            toast.querySelector('.toast-action-btn').onclick = () => {
+                desvanecerToast(toast);
+                toggleChat(true);
+                const pregunta = isbnRelacionado 
+                    ? `Cuéntame más sobre el libro con ISBN ${isbnRelacionado} y sus temas relacionados.`
+                    : `¿Puedes darme más detalles sobre: "${texto}"?`;
+                $('chatInput').value = pregunta;
+                enviarPreguntaChat(pregunta);
+            };
+
+            contenedor.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('toast-enter');
+            });
+
+            // Auto-cierre no invasivo a los 8 segundos
+            const timerAutoCierre = setTimeout(() => {
+                desvanecerToast(toast);
+            }, 8000);
+
+            toast._timer = timerAutoCierre;
+        }
+
+        function desvanecerToast(toast) {
+            if (!toast || toast._cerrando) return;
+            toast._cerrando = true;
+            if (toast._timer) clearTimeout(toast._timer);
+            toast.classList.add('toast-exit');
+            setTimeout(() => {
+                if (toast.parentElement) toast.parentElement.removeChild(toast);
+            }, 300);
+        }
+
+        async function solicitarSugerenciaContextual(params = {}) {
+            const ahora = Date.now();
+            if (ahora - ultimaSugerenciaTimestamp < COOLDOWN_SUGERENCIAS) return;
+            if (chatAbierto) return;
+
+            try {
+                const qs = new URLSearchParams(params).toString();
+                const resp = await fetch(`${config.baseUrl}/api/sugerencias?${qs}`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (data.sugerencia) {
+                    ultimaSugerenciaTimestamp = Date.now();
+                    mostrarSugerenciaNoInvasiva(data.sugerencia, data.isbn);
+                }
+            } catch (_) {
+                // Silencioso por diseño para no perturbar al usuario
+            }
+        }
+
+        // Interceptores de interacción para sugerencias no invasivas:
+        // 1. Al cambiar de página en el catálogo (tras 4 segundos de descanso visual)
+        const _cargarCatalogoBase = cargarCatalogo;
+        cargarCatalogo = async function() {
+            await _cargarCatalogoBase();
+            setTimeout(() => {
+                solicitarSugerenciaContextual({ accion: 'navegar', pagina: String(currentPage) });
+            }, 4000);
+        };
+
+        // 2. Al interactuar / pausar el ratón sobre un libro específico (hover > 2.5 seg)
+        document.addEventListener('mouseover', (e) => {
+            const card = e.target.closest('.card');
+            if (!card) return;
+            if (timerHoverCard) clearTimeout(timerHoverCard);
+
+            timerHoverCard = setTimeout(() => {
+                const isbnEl = card.querySelector('.card-meta dd');
+                if (isbnEl) {
+                    const isbn = isbnEl.textContent.trim();
+                    solicitarSugerenciaContextual({ accion: 'ver_libro', isbn });
+                }
+            }, 2500);
+        });
+
+        document.addEventListener('mouseout', (e) => {
+            const card = e.target.closest('.card');
+            if (card && timerHoverCard) {
+                clearTimeout(timerHoverCard);
+                timerHoverCard = null;
+            }
+        });
+
+        // Verificar estado de Ollama al arrancar
+        verificarEstadoOllama();
     </script>
 </body>
 </html>

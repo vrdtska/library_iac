@@ -29,7 +29,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # Modulo compartido apps/common (Redis + JWT). Funciona tanto si el servicio
 # se ejecuta desde su carpeta como desde la raiz del repo.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common import redis_store  # noqa: E402
 
 load_dotenv()

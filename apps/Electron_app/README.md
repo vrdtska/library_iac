@@ -101,13 +101,21 @@ La app corre en el contexto del navegador de Electron, por eso el microservicio
 tiene `flask-cors` habilitado y responde `Access-Control-Allow-Origin: *`.
 Si cambias el origen, ajusta `CORS(app)` en `app.py`.
 
-## 7. Estructura
+## 7. Asistente IA & Sugerencias No Invasivas
+
+La aplicación cuenta con un asistente interactivo impulsado por **Ollama (Llama 3.2)**:
+- **Botón Flotante (FAB)**: Ubicado en la esquina inferior derecha para abrir el panel drawer del chat sin interrumpir la visualización del catálogo.
+- **Conocimiento técnico**: El modelo conoce todos los libros, autores, precios, stock y conceptos técnicos definidos en la base de datos (por ejemplo, definiciones de *IaaS*, *SaaS*, etc.).
+- **Streaming de respuestas**: Las respuestas del modelo se muestran en tiempo real conforme se generan.
+- **Sugerencias No Invasivas (Toast Notifications)**: Conforme el usuario interactúa (por ejemplo, al pausar el cursor sobre un libro o cambiar de página), se despliegan notificaciones sutiles en la esquina inferior izquierda con consejos de lectura, curiosidades o conceptos afines. Cada sugerencia se auto-descarta a los 8 segundos y cuenta con un botón directo para profundizar en el chat.
+
+## 8. Estructura
 
 ```text
 apps/Electron_app/
 ├── main.js        # ventana principal
-├── index.html     # interfaz + consumo del XML
-├── style.css      # estilos
+├── index.html     # interfaz + consumo del XML + chat y sugerencias
+├── style.css      # estilos visuales del catálogo, drawer y toasts
 └── package.json
 ```
 
