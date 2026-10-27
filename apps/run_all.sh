@@ -57,7 +57,7 @@ arrancar() {
         fi
         ( cd "$dir" && \
           PYTHONPATH="$APP_DIR${PYTHONPATH:+:$PYTHONPATH}" \
-          FLASK_PORT="$puerto" "$PY" app.py > "$LOG_DIR/$svc.log" 2>&1 & \
+          FLASK_PORT="$puerto" nohup "$PY" app.py > "$LOG_DIR/$svc.log" 2>&1 & \
           echo $! > "$LOG_DIR/$svc.pid" )
         echo "[..] $svc arrancando en :$puerto (log: logs/$svc.log)"
     done
@@ -79,9 +79,21 @@ arrancar() {
             echo "  [??]  $svc :$puerto no responde todavia (ver logs/$svc.log)"
         fi
     done
+
+    HOST_IP="${HOST_IP:-${PUBLIC_IP:-}}"
+    if [ -z "$HOST_IP" ]; then
+        HOST_IP="$(curl -s --max-time 1 https://api.ipify.org 2>/dev/null || true)"
+    fi
+    if [ -z "$HOST_IP" ]; then
+        HOST_IP="localhost"
+    fi
+
     echo
-    echo "Swagger books : http://localhost:5001/apidocs/"
-    echo "Health login  : http://localhost:5000/health?format=json"
+    echo "Swagger books : http://${HOST_IP}:5001/apidocs/"
+    echo "Health login  : http://${HOST_IP}:5000/health?format=json"
+    if [ "$HOST_IP" != "localhost" ]; then
+        echo "Localhost     : http://localhost:5001/apidocs/"
+    fi
 }
 
 detener() {
